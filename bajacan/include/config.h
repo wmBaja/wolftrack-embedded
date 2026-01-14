@@ -20,18 +20,14 @@ struct BoardHooks {
 // should provide concrete values that match their CAN command map.
 struct ControlMessageConfig {
   uint32_t sleepCommandId;
-  uint32_t wakeCommandId;
   uint8_t sleepCommandByte;  // Optional payload byte used to verify sleep.
-  uint8_t wakeCommandByte;   // Optional payload byte used to verify wake.
   uint8_t commandByteIndex;  // Index in payload containing the command byte.
 };
 
 // Defaults that match the current system-level CAN control contracts.
 constexpr ControlMessageConfig kDefaultControlCommands{
     0x0,  // sleepCommandId
-    0x0,  // wakeCommandId
     0x0,  // sleepCommandByte
-    0x1,  // wakeCommandByte
     0     // commandByteIndex
 };
 

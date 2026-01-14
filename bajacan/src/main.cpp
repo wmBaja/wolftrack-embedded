@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <ACAN2517FD.h>
+#include <avr/sleep.h>
 
 #include "config.h"        // Common contracts for board configs
 #include <can_driver.h>
@@ -29,6 +30,11 @@ void CallIfSet(void (*hook)()) {
   if (hook != nullptr) {
     hook();
   }
+}
+
+void OnWakeFlag() {
+  gWakeRequested = true;
+  gSleepRequested = false;
 }
 
 void OnCanInterrupt() {
@@ -67,12 +73,6 @@ void HandleControlFrame(const CANFDMessage &frame) {
                      kBoardConfig.control.sleepCommandByte)) {
     gSleepRequested = true;
     gWakeRequested = false;
-  }
-
-  if (MatchesCommand(frame, kBoardConfig.control.wakeCommandId,
-                     kBoardConfig.control.wakeCommandByte)) {
-    gWakeRequested = true;
-    gSleepRequested = false;
   }
 }
 
@@ -124,8 +124,9 @@ void PollSensors(const uint32_t nowMs) {
     frame.ext = kBoardConfig.useExtendedIds;
     frame.len = 0;
 
+    // Sample function populates frame len and data, true if successful
     if (!desc.sample(desc.context, frame)) {
-      continue;
+      continue;  // If sample returns false, skip trying to send
     }
 
     gCanDriver.tryToSend(frame);
@@ -155,9 +156,9 @@ void ResumeSensorsAfterWake() {
 }
 
 void EnterLowPowerSleep() {
-  // TODO: Use the AVR128DB32 sleep modes to drop power consumption while
-  // keeping the CAN INT line configured as a wake source.
-  delay(5);
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  sleep_enable();
+  sleep_cpu();
 }
 
 void PrepareForSleep() {
@@ -198,8 +199,6 @@ void setup() {
   pinMode(kBoardConfig.canIntPin, INPUT_PULLUP);
   pinMode(kBoardConfig.canStbyPin, OUTPUT);
   SPI.begin();
-  attachInterrupt(digitalPinToInterrupt(kBoardConfig.canIntPin), OnCanInterrupt,
-                  FALLING);
 
   if (!ConfigureCan()) {
     // TODO: Surface CAN init failure via LED blink or debug UART.
@@ -207,6 +206,9 @@ void setup() {
       delay(100);
     }
   }
+  gCanDriver.setWakeHandler(OnWakeFlag);
+  gCanDriver.enableWakeInterrupt();
+  gCanDriver.clearWakeFlag();
 
   InitializeSensors();
 }
@@ -219,9 +221,9 @@ void loop() {
   WakeIfRequested();
 
   if (gNodeState == NodeState::Sleeping) {
-    EnterLowPowerSleep();
-    ServiceIncomingCan();  // Pull the wake frame that triggered the interrupt.
-    WakeIfRequested();
+    EnterLowPowerSleep();  // Pauses after execution until interrupt
+    sleep_disable();       // Wake CPU immediately on interrupt
+    WakeIfRequested();     // Wake flag set by ISR
     return;
   }
 
