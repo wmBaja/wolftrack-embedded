@@ -31,18 +31,23 @@ constexpr ControlMessageConfig kDefaultControlCommands{
     0     // commandByteIndex
 };
 
-// Contract that each sensor driver entry must satisfy. Board configs supply a
-// table of these entries that main.cpp will iterate over.
-struct SensorDescriptor {
+// Required per-sensor metadata carried in each sensor's context.
+struct SensorContext {
   const char *name;
-  uint32_t canId;            // CAN ID the sampled payload should be sent on.
-  uint16_t pollIntervalMs;   // How often to poll/sample the sensor.
-  void *context;             // Driver instance or any opaque pointer.
-  bool (*begin)(void *ctx);  // Called once during setup.
-  bool (*sample)(void *ctx,
+  uint32_t canId;          // CAN ID the sampled payload should be sent on.
+  uint16_t pollIntervalMs; // How often to poll/sample the sensor.
+};
+
+// Contract that each sensor driver entry must satisfy. Board configs supply a
+// table of these entries that main.cpp will iterate over. Each entry's context
+// must begin with a SensorContext so the core app can read common metadata.
+struct SensorDescriptor {
+  const void *context;       // Driver config or instance; must include SensorContext.
+  bool (*begin)(const void *ctx);  // Called once during setup.
+  bool (*sample)(const void *ctx,
                  CANFDMessage &outFrame);  // Should fill outFrame for sending.
-  void (*suspend)(void *ctx);              // Optional; called before sleep.
-  void (*resume)(void *ctx);               // Optional; called after wake.
+  void (*suspend)(const void *ctx);        // Optional; called before sleep.
+  void (*resume)(const void *ctx);         // Optional; called after wake.
 };
 
 // Aggregates the board-specific static data needed by the generic app.

@@ -90,9 +90,10 @@ constexpr BoardConfig kBoardConfig{
 
 ## Creating a Sensor Library (preferred flow)
 Keep sensor implementations in `bajacan/lib/<sensor_name>/` so they can be reused across boards. Each sensor library should:
-- Export a `SensorDescriptor` (and any helper functions) in `include/<sensor_name>.h`.
-- Implement the driver logic and descriptor in `src/<sensor_name>.cpp`.
+- Export a `constexpr SensorDescriptor` in `include/<sensor_name>.h` if the board config is `constexpr`.
+- Implement the driver logic in `src/<sensor_name>.cpp`.
 - Let board configs include the header and drop the exported descriptor into their sensor table.
+- If the sensor depends on third-party libraries, add a `library.json` with `dependencies` so PlatformIO compiles it with the right include paths.
 
 ### Minimal sensor library example
 `lib/throttle_sensor/include/throttle_sensor.h`
@@ -102,7 +103,17 @@ Keep sensor implementations in `bajacan/lib/<sensor_name>/` so they can be reuse
 
 bool ThrottleBegin(void *ctx);
 bool ThrottleSample(void *ctx, CANFDMessage &outFrame);
-extern const SensorDescriptor kThrottleSensor;
+
+constexpr SensorDescriptor kThrottleSensor{
+    .name = "Throttle",
+    .canId = 0x200,
+    .pollIntervalMs = 20,
+    .context = nullptr,
+    .begin = ThrottleBegin,
+    .sample = ThrottleSample,
+    .suspend = nullptr,
+    .resume = nullptr,
+};
 ```
 
 `lib/throttle_sensor/src/throttle_sensor.cpp`
@@ -119,27 +130,18 @@ bool ThrottleBegin(void *) {
 
 bool ThrottleSample(void *, CANFDMessage &outFrame) {
   gLastReading = analogRead(A0);
-  outFrame.id = 0x200;
-  outFrame.ext = kDefaultUseExtendedIds;  // Match your board if different.
   outFrame.len = 2;
   outFrame.data[0] = gLastReading >> 8;
   outFrame.data[1] = gLastReading & 0xFF;
   return true;  // Return false to skip sending.
 }
-
-const SensorDescriptor kThrottleSensor{
-    .name = "Throttle",
-    .canId = 0x200,
-    .pollIntervalMs = 20,
-    .context = nullptr,
-    .begin = ThrottleBegin,
-    .sample = ThrottleSample,
-    .suspend = nullptr,
-    .resume = nullptr,
-};
 ```
 
 Once the library exists, the board config simply includes `<throttle_sensor.h>` and adds `kThrottleSensor` to its `kBoardConfig.sensors` array. If the sensor depends on third-party libraries, add them in `platformio.ini` or the sensor library’s own `library.json`.
+
+### PlatformIO dependency notes
+- If a sensor header is only included via a board config header, the LDF may not pick it up; add `#include <sensor_name.h>` to `bajacan/src/main.cpp` or set `lib_ldf_mode = deep+` for that environment.
+- If a local library depends on another library (e.g., `ACAN2517FD`), add a `library.json` in that library so PlatformIO pulls in the dependency when compiling it.
 
 ## Sleep/Wake Control Frames
 - Defaults (`kDefaultControlCommands` in `config.h`): wake byte is `0x1`, sleep byte is `0x0`, both at payload index 0. IDs default to `0x0` and should be overridden per board.  

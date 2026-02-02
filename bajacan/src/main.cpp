@@ -4,6 +4,8 @@
 #include <avr/sleep.h>
 
 #include "config.h"        // Common contracts for board configs
+#include "debug_print.h"
+#include <analog_sensor.h>
 #include <can_driver.h>
 #include <sensors_config.h>  // Provided by the selected board environment
 
@@ -20,6 +22,7 @@ volatile bool gWakeRequested = false;
 
 struct SensorRuntime {
   const SensorDescriptor *desc;
+  const SensorContext *context;
   uint32_t nextPollAtMs;
 };
 
@@ -30,6 +33,10 @@ void CallIfSet(void (*hook)()) {
   if (hook != nullptr) {
     hook();
   }
+}
+
+const SensorContext *GetSensorContext(const SensorDescriptor &desc) {
+  return static_cast<const SensorContext *>(desc.context);
 }
 
 void OnWakeFlag() {
@@ -91,7 +98,14 @@ void InitializeSensors() {
   for (size_t i = 0; i < kBoardConfig.sensorCount; ++i) {
     SensorRuntime &runtime = gSensorRuntime[i];
     runtime.desc = &kBoardConfig.sensors[i];
-    runtime.nextPollAtMs = now + runtime.desc->pollIntervalMs;
+    runtime.context = GetSensorContext(*runtime.desc);
+    const uint16_t pollIntervalMs =
+        runtime.context != nullptr ? runtime.context->pollIntervalMs : 0U;
+    runtime.nextPollAtMs = now + pollIntervalMs;
+
+    if (runtime.context == nullptr) {
+      continue;
+    }
 
     if (runtime.desc->begin != nullptr) {
       const bool ok = runtime.desc->begin(runtime.desc->context);
@@ -104,8 +118,13 @@ void PollSensors(const uint32_t nowMs) {
   for (size_t i = 0; i < kBoardConfig.sensorCount; ++i) {
     SensorRuntime &runtime = gSensorRuntime[i];
     const SensorDescriptor &desc = *runtime.desc;
+    const SensorContext *context = runtime.context;
 
-    if (desc.pollIntervalMs == 0U) {
+    if (context == nullptr) {
+      continue;
+    }
+
+    if (context->pollIntervalMs == 0U) {
       continue;  // Disabled sensor.
     }
 
@@ -113,14 +132,14 @@ void PollSensors(const uint32_t nowMs) {
       continue;
     }
 
-    runtime.nextPollAtMs = nowMs + desc.pollIntervalMs;
+    runtime.nextPollAtMs = nowMs + context->pollIntervalMs;
 
     if (desc.sample == nullptr) {
       continue;
     }
 
     CANFDMessage frame;
-    frame.id = desc.canId;
+    frame.id = context->canId;
     frame.ext = kBoardConfig.useExtendedIds;
     frame.len = 0;
 
@@ -129,7 +148,10 @@ void PollSensors(const uint32_t nowMs) {
       continue;  // If sample returns false, skip trying to send
     }
 
-    gCanDriver.tryToSend(frame);
+    const bool sent = gCanDriver.tryToSend(frame);
+
+    //PrintSensorPoll(context->name, frame, nowMs);
+    PrintCanTxResult(frame, nowMs, sent);
   }
 }
 
@@ -147,8 +169,10 @@ void ResumeSensorsAfterWake() {
   for (size_t i = 0; i < kBoardConfig.sensorCount; ++i) {
     SensorRuntime &runtime = gSensorRuntime[i];
     const SensorDescriptor &desc = *runtime.desc;
-
-    runtime.nextPollAtMs = now + desc.pollIntervalMs;
+    const SensorContext *context = runtime.context;
+    const uint16_t pollIntervalMs =
+        context != nullptr ? context->pollIntervalMs : 0U;
+    runtime.nextPollAtMs = now + pollIntervalMs;
     if (desc.resume != nullptr) {
       desc.resume(desc.context);
     }
@@ -199,6 +223,7 @@ void setup() {
   pinMode(kBoardConfig.canIntPin, INPUT_PULLUP);
   pinMode(kBoardConfig.canStbyPin, OUTPUT);
   SPI.begin();
+  Serial.begin(115200); // Serial0 for debug
 
   if (!ConfigureCan()) {
     // TODO: Surface CAN init failure via LED blink or debug UART.
