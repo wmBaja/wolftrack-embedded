@@ -150,8 +150,11 @@ void PollSensors(const uint32_t nowMs) {
 
     const bool sent = gCanDriver.tryToSend(frame);
 
-    //PrintSensorPoll(context->name, frame, nowMs);
+
+#if BAJACAN_ENABLE_DEBUG_PRINTS
+    PrintSensorPoll(context->name, frame, nowMs);
     PrintCanTxResult(frame, nowMs, sent);
+#endif
   }
 }
 
@@ -223,7 +226,9 @@ void setup() {
   pinMode(kBoardConfig.canIntPin, INPUT_PULLUP);
   pinMode(kBoardConfig.canStbyPin, OUTPUT);
   SPI.begin();
+#if BAJACAN_ENABLE_DEBUG_PRINTS
   Serial.begin(115200); // Serial0 for debug
+#endif
 
   if (!ConfigureCan()) {
     // TODO: Surface CAN init failure via LED blink or debug UART.

@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <debug_print.h>
 
+#if BAJACAN_ENABLE_DEBUG_PRINTS
 void PrintCanFrame(const CANFDMessage &frame) {
   Serial.print("id=0x");
   Serial.print(frame.id, HEX);
@@ -39,13 +40,29 @@ void PrintSensorPoll(const char *name, const CANFDMessage &frame,
 void PrintCanTxResult(const CANFDMessage &frame, const uint32_t nowMs,
                       const bool sent) {
   PrintTimestampMs(nowMs);
-  // if (sent) {
-  //   Serial.print("CAN TX ok ");
-  //   PrintCanFrame(frame);
-  //   Serial.println();
-  // } else {
-  //   Serial.print("CAN TX failed id=0x");
-  //   Serial.print(frame.id, HEX);
-  //   Serial.println();
-  // }
+  if (sent) {
+    Serial.print("CAN TX ok ");
+    PrintCanFrame(frame);
+    Serial.println();
+  } else {
+    Serial.print("CAN TX failed id=0x");
+    Serial.print(frame.id, HEX);
+    Serial.println();
+  }
 }
+#else
+void PrintCanFrame(const CANFDMessage &frame) { (void)frame; }
+void PrintTimestampMs(const uint32_t nowMs) { (void)nowMs; }
+void PrintSensorPoll(const char *name, const CANFDMessage &frame,
+                     const uint32_t nowMs) {
+  (void)name;
+  (void)frame;
+  (void)nowMs;
+}
+void PrintCanTxResult(const CANFDMessage &frame, const uint32_t nowMs,
+                      const bool sent) {
+  (void)frame;
+  (void)nowMs;
+  (void)sent;
+}
+#endif
