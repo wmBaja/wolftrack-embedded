@@ -55,7 +55,7 @@ struct BoardConfig {
   uint8_t canCsPin;
   uint8_t canIntPin;
   uint8_t canStbyPin;
-  uint32_t canOscillatorHz;
+  ACAN2517FDSettings::Oscillator canOscillator;
   uint32_t arbitrationBitrate;
   DataBitRateFactor dataBitrateFactor;
   bool useExtendedIds;
@@ -67,7 +67,8 @@ struct BoardConfig {
 
 // Common CAN defaults shared across boards; override any field in kBoardConfig
 // if a given board differs.
-constexpr uint32_t kDefaultMcpOscHz = 20'000'000UL;
+constexpr ACAN2517FDSettings::Oscillator kDefaultMcpOscillator =
+    ACAN2517FDSettings::OSC_20MHz;
 constexpr uint8_t kDefaultCanCsPin = 7;
 constexpr uint8_t kDefaultCanIntPin = 14;
 constexpr uint8_t kDefaultCanStbyPin = 13;  // Set per board if STBY is wired.

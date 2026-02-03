@@ -13,6 +13,9 @@ namespace {
 
 // ACAN2517FD driver instance configured with board-provided pins.
 ACAN2517FD gCanDriver{kBoardConfig.canCsPin, SPI, kBoardConfig.canIntPin};
+// TEMP: Toggle pin on CAN TX for scope frequency checks (remove when done).
+constexpr uint8_t kCanTxTogglePin = 3;
+bool gCanTxToggleState = false;
 
 enum class NodeState { Awake, Sleeping };
 NodeState gNodeState = NodeState::Awake;
@@ -39,6 +42,29 @@ const SensorContext *GetSensorContext(const SensorDescriptor &desc) {
   return static_cast<const SensorContext *>(desc.context);
 }
 
+size_t CountActiveSensors() {
+  size_t count = 0;
+  for (size_t i = 0; i < kBoardConfig.sensorCount; ++i) {
+    const SensorContext *context = GetSensorContext(kBoardConfig.sensors[i]);
+    if (context != nullptr && context->pollIntervalMs > 0U) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+uint32_t StaggeredFirstPollTime(const uint32_t nowMs,
+                                const uint16_t pollIntervalMs,
+                                const size_t activeIndex,
+                                const size_t activeCount) {
+  if (pollIntervalMs == 0U || activeCount <= 1U) {
+    return nowMs + pollIntervalMs;
+  }
+  const uint32_t offset =
+      (static_cast<uint32_t>(pollIntervalMs) * activeIndex) / activeCount;
+  return nowMs + offset;
+}
+
 void OnWakeFlag() {
   gWakeRequested = true;
   gSleepRequested = false;
@@ -49,7 +75,7 @@ void OnCanInterrupt() {
 }
 
 bool ConfigureCan() {
-  ACAN2517FDSettings settings{kBoardConfig.canOscillatorHz,
+  ACAN2517FDSettings settings{kBoardConfig.canOscillator,
                               kBoardConfig.arbitrationBitrate,
                               kBoardConfig.dataBitrateFactor};
   settings.mRequestedMode = ACAN2517FDSettings::NormalFD;
@@ -95,13 +121,21 @@ void ServiceIncomingCan() {
 
 void InitializeSensors() {
   const uint32_t now = millis();
+  const size_t activeCount = CountActiveSensors();
+  size_t activeIndex = 0;
   for (size_t i = 0; i < kBoardConfig.sensorCount; ++i) {
     SensorRuntime &runtime = gSensorRuntime[i];
     runtime.desc = &kBoardConfig.sensors[i];
     runtime.context = GetSensorContext(*runtime.desc);
     const uint16_t pollIntervalMs =
         runtime.context != nullptr ? runtime.context->pollIntervalMs : 0U;
-    runtime.nextPollAtMs = now + pollIntervalMs;
+    if (runtime.context != nullptr && pollIntervalMs > 0U) {
+      runtime.nextPollAtMs =
+          StaggeredFirstPollTime(now, pollIntervalMs, activeIndex, activeCount);
+      ++activeIndex;
+    } else {
+      runtime.nextPollAtMs = now + pollIntervalMs;
+    }
 
     if (runtime.context == nullptr) {
       continue;
@@ -132,7 +166,15 @@ void PollSensors(const uint32_t nowMs) {
       continue;
     }
 
-    runtime.nextPollAtMs = nowMs + context->pollIntervalMs;
+    {
+      const uint32_t scheduledAt = runtime.nextPollAtMs;
+      const uint32_t intervalMs = context->pollIntervalMs;
+      uint32_t nextPoll = scheduledAt + intervalMs;
+      if (nextPoll <= nowMs) {
+        nextPoll = nowMs + intervalMs;
+      }
+      runtime.nextPollAtMs = nextPoll;
+    }
 
     if (desc.sample == nullptr) {
       continue;
@@ -149,6 +191,9 @@ void PollSensors(const uint32_t nowMs) {
     }
 
     const bool sent = gCanDriver.tryToSend(frame);
+    // TEMP: Toggle pin on CAN TX for scope frequency checks (remove when done).
+    gCanTxToggleState = !gCanTxToggleState;
+    digitalWrite(kCanTxTogglePin, gCanTxToggleState ? HIGH : LOW);
 
 
 #if BAJACAN_ENABLE_DEBUG_PRINTS
@@ -169,13 +214,21 @@ void SuspendSensorsForSleep() {
 
 void ResumeSensorsAfterWake() {
   const uint32_t now = millis();
+  const size_t activeCount = CountActiveSensors();
+  size_t activeIndex = 0;
   for (size_t i = 0; i < kBoardConfig.sensorCount; ++i) {
     SensorRuntime &runtime = gSensorRuntime[i];
     const SensorDescriptor &desc = *runtime.desc;
     const SensorContext *context = runtime.context;
     const uint16_t pollIntervalMs =
         context != nullptr ? context->pollIntervalMs : 0U;
-    runtime.nextPollAtMs = now + pollIntervalMs;
+    if (context != nullptr && pollIntervalMs > 0U) {
+      runtime.nextPollAtMs =
+          StaggeredFirstPollTime(now, pollIntervalMs, activeIndex, activeCount);
+      ++activeIndex;
+    } else {
+      runtime.nextPollAtMs = now + pollIntervalMs;
+    }
     if (desc.resume != nullptr) {
       desc.resume(desc.context);
     }
@@ -225,6 +278,8 @@ void setup() {
   pinMode(kBoardConfig.canCsPin, OUTPUT);
   pinMode(kBoardConfig.canIntPin, INPUT_PULLUP);
   pinMode(kBoardConfig.canStbyPin, OUTPUT);
+  // TEMP: Toggle pin on CAN TX for scope frequency checks (remove when done).
+  pinMode(kCanTxTogglePin, OUTPUT);
   SPI.begin();
 #if BAJACAN_ENABLE_DEBUG_PRINTS
   Serial.begin(115200); // Serial0 for debug

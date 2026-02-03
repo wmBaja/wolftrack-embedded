@@ -16,7 +16,7 @@ constexpr AnalogSensorContext kExampleAnalog0{
         {
             .name = "AnalogRaw0",
             .canId = 0x300,
-            .pollIntervalMs = 10,
+            .pollIntervalMs = 5,
         },
     .pin = 19,  // PD7
 };
@@ -25,7 +25,7 @@ constexpr AnalogSensorContext kExampleAnalog1{
         {
             .name = "AnalogRaw1",
             .canId = 0x200,
-            .pollIntervalMs = 10,
+            .pollIntervalMs = 5,
         },
     .pin = 17, // PD5
 };
@@ -40,7 +40,7 @@ constexpr BoardConfig kBoardConfig{
     kDefaultCanCsPin,
     kDefaultCanIntPin,
     kDefaultCanStbyPin,
-    kDefaultMcpOscHz,
+    kDefaultMcpOscillator,
     kDefaultArbitrationBitrate,
     kDefaultDataBitrateFactor,
     kDefaultUseExtendedIds,
