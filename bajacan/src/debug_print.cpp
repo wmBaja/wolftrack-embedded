@@ -27,14 +27,31 @@ void PrintTimestampMs(const uint32_t nowMs) {
   Serial.print(" ms] ");
 }
 
-void PrintSensorPoll(const char *name, const CANFDMessage &frame,
-                     const uint32_t nowMs) {
+void PrintGroupPoll(const char *name, const CANFDMessage &frame,
+                    const uint32_t nowMs) {
   PrintTimestampMs(nowMs);
-  Serial.print("Sensor ");
+  Serial.print("Group ");
   Serial.print(name != nullptr ? name : "Unknown");
   Serial.print(" polled ");
   PrintCanFrame(frame);
   Serial.println();
+}
+
+void PrintGroupMemberZeroFill(const char *groupName, const char *sensorName,
+                              const uint32_t nowMs) {
+  PrintTimestampMs(nowMs);
+  Serial.print("Group ");
+  Serial.print(groupName != nullptr ? groupName : "Unknown");
+  Serial.print(" zero-filled sensor ");
+  Serial.print(sensorName != nullptr ? sensorName : "Unknown");
+  Serial.println();
+}
+
+void PrintGroupConfigError(const char *groupName, const uint32_t nowMs) {
+  PrintTimestampMs(nowMs);
+  Serial.print("Group ");
+  Serial.print(groupName != nullptr ? groupName : "Unknown");
+  Serial.println(" disabled due to invalid config");
 }
 
 void PrintCanTxResult(const CANFDMessage &frame, const uint32_t nowMs,
@@ -53,10 +70,20 @@ void PrintCanTxResult(const CANFDMessage &frame, const uint32_t nowMs,
 #else
 void PrintCanFrame(const CANFDMessage &frame) { (void)frame; }
 void PrintTimestampMs(const uint32_t nowMs) { (void)nowMs; }
-void PrintSensorPoll(const char *name, const CANFDMessage &frame,
-                     const uint32_t nowMs) {
+void PrintGroupPoll(const char *name, const CANFDMessage &frame,
+                    const uint32_t nowMs) {
   (void)name;
   (void)frame;
+  (void)nowMs;
+}
+void PrintGroupMemberZeroFill(const char *groupName, const char *sensorName,
+                              const uint32_t nowMs) {
+  (void)groupName;
+  (void)sensorName;
+  (void)nowMs;
+}
+void PrintGroupConfigError(const char *groupName, const uint32_t nowMs) {
+  (void)groupName;
   (void)nowMs;
 }
 void PrintCanTxResult(const CANFDMessage &frame, const uint32_t nowMs,

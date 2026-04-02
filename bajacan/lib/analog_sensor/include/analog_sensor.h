@@ -2,6 +2,8 @@
 
 #include <config.h>
 
+constexpr uint8_t kAnalogSensorPayloadSize = 2U;
+
 struct AnalogSensorContext {
   SensorContext base;
   uint8_t pin;

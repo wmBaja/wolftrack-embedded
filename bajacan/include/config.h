@@ -6,6 +6,7 @@
 #pragma once
 
 #include <ACAN2517FD.h>
+#include <stddef.h>
 #include <stdint.h>
 
 // Optional board-level hooks that may be provided by a board config. Any
@@ -34,20 +35,30 @@ constexpr ControlMessageConfig kDefaultControlCommands{
 // Required per-sensor metadata carried in each sensor's context.
 struct SensorContext {
   const char *name;
-  uint32_t canId;          // CAN ID the sampled payload should be sent on.
-  uint16_t pollIntervalMs; // How often to poll/sample the sensor.
+  uint8_t payloadSize;  // Fixed payload size contributed to a message group.
 };
 
 // Contract that each sensor driver entry must satisfy. Board configs supply a
-// table of these entries that main.cpp will iterate over. Each entry's context
-// must begin with a SensorContext so the core app can read common metadata.
+// table of these entries that message groups will reference. Each entry's
+// context must begin with a SensorContext so the core app can read common
+// metadata.
 struct SensorDescriptor {
   const void *context;       // Driver config or instance; must include SensorContext.
   bool (*begin)(const void *ctx);  // Called once during setup.
   bool (*sample)(const void *ctx,
-                 CANFDMessage &outFrame);  // Should fill outFrame for sending.
+                 CANFDMessage &outFrame);  // Should fill outFrame.len/data.
   void (*suspend)(const void *ctx);        // Optional; called before sleep.
   void (*resume)(const void *ctx);         // Optional; called after wake.
+};
+
+// Message groups define the CAN wire contract and polling schedule for one
+// aggregated CAN FD frame.
+struct MessageGroupConfig {
+  const char *name;
+  uint32_t canId;
+  uint16_t pollIntervalMs;
+  const SensorDescriptor *sensors;
+  size_t sensorCount;
 };
 
 // Aggregates the board-specific static data needed by the generic app.
@@ -61,8 +72,8 @@ struct BoardConfig {
   bool useExtendedIds;
   ControlMessageConfig control;
   BoardHooks hooks;
-  const SensorDescriptor *sensors;
-  size_t sensorCount;
+  const MessageGroupConfig *groups;
+  size_t groupCount;
 };
 
 // Common CAN defaults shared across boards; override any field in kBoardConfig

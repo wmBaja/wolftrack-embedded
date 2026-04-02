@@ -1,6 +1,7 @@
 #pragma once
 
 #include <analog_sensor.h>
+#include <i2c_sensor.h>
 #include <config.h>
 
 // Example hooks; set to nullptr when unused.
@@ -10,29 +11,56 @@ constexpr BoardHooks kExampleHooks{
     nullptr   // afterWake
 };
 
-// Example sensors table; add entries as real sensors are implemented.
-constexpr AnalogSensorContext kExampleAnalog0{
-    .base =
-        {
-            .name = "AnalogRaw0",
-            .canId = 0x300,
-            .pollIntervalMs = 5,
-        },
-    .pin = 19,  // PD7
-};
-constexpr AnalogSensorContext kExampleAnalog1{
-    .base = 
-        {
-            .name = "AnalogRaw1",
-            .canId = 0x200,
-            .pollIntervalMs = 5,
-        },
-    .pin = 17, // PD5
+// Example grouped sensors table; add entries as real sensors are implemented.
+constexpr I2CSensorContext kI2CSensor{
+    .base = {
+        .name = "WAFT Recv",
+        .payloadSize = kI2cSensorPayloadSize,
+    },
+    .addr = 0x42,
+    .clockHz = 400000,
 };
 
-constexpr SensorDescriptor kExampleSensors[] = {
-    MakeAnalogSensor(&kExampleAnalog0),
-    MakeAnalogSensor(&kExampleAnalog1),
+constexpr AnalogSensorContext kFrontBrakePressureSensor{
+    .base = {
+        .name = "Front Brake Pressure",
+        .payloadSize = kAnalogSensorPayloadSize,
+    },
+    .pin = A0,
+};
+
+constexpr AnalogSensorContext kRearBrakePressureSensor{
+    .base = {
+        .name = "Rear Brake Pressure",
+        .payloadSize = kAnalogSensorPayloadSize,
+    },
+    .pin = A1,
+};
+
+constexpr SensorDescriptor kFastGroupSensors[] = {
+    MakeI2CSensor(&kI2CSensor),
+    MakeAnalogSensor(&kFrontBrakePressureSensor),
+};
+
+constexpr SensorDescriptor kSlowGroupSensors[] = {
+    MakeAnalogSensor(&kRearBrakePressureSensor),
+};
+
+constexpr MessageGroupConfig kExampleGroups[] = {
+    {
+        .name = "Fast Sensors",
+        .canId = 0x100,
+        .pollIntervalMs = 10,
+        .sensors = kFastGroupSensors,
+        .sensorCount = sizeof(kFastGroupSensors) / sizeof(kFastGroupSensors[0]),
+    },
+    {
+        .name = "Slow Sensors",
+        .canId = 0x101,
+        .pollIntervalMs = 20,
+        .sensors = kSlowGroupSensors,
+        .sensorCount = sizeof(kSlowGroupSensors) / sizeof(kSlowGroupSensors[0]),
+    },
 };
 
 // Example board configuration demonstrating default CAN wiring and control IDs.
@@ -46,6 +74,6 @@ constexpr BoardConfig kBoardConfig{
     kDefaultUseExtendedIds,
     kDefaultControlCommands,
     kExampleHooks,
-    kExampleSensors,
-    sizeof(kExampleSensors) / sizeof(kExampleSensors[0]),
+    kExampleGroups,
+    sizeof(kExampleGroups) / sizeof(kExampleGroups[0]),
 };

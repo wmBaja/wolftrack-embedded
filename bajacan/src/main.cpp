@@ -3,19 +3,20 @@
 #include <ACAN2517FD.h>
 #include <avr/sleep.h>
 
+#include <string.h>
+
 #include "config.h"        // Common contracts for board configs
 #include "debug_print.h"
 #include <analog_sensor.h>
 #include <can_driver.h>
+// Force PlatformIO LDF to discover drivers referenced only by board configs.
+#include <i2c_sensor.h>
 #include <sensors_config.h>  // Provided by the selected board environment
 
 namespace {
 
 // ACAN2517FD driver instance configured with board-provided pins.
 ACAN2517FD gCanDriver{kBoardConfig.canCsPin, SPI, kBoardConfig.canIntPin};
-// TEMP: Toggle pin on CAN TX for scope frequency checks (remove when done).
-constexpr uint8_t kCanTxTogglePin = 3;
-bool gCanTxToggleState = false;
 
 enum class NodeState { Awake, Sleeping };
 NodeState gNodeState = NodeState::Awake;
@@ -23,14 +24,17 @@ NodeState gNodeState = NodeState::Awake;
 volatile bool gSleepRequested = false;
 volatile bool gWakeRequested = false;
 
-struct SensorRuntime {
-  const SensorDescriptor *desc;
-  const SensorContext *context;
+constexpr uint8_t kMaxCanFdPayloadBytes = 64U;
+
+struct GroupRuntime {
+  const MessageGroupConfig *group;
   uint32_t nextPollAtMs;
+  uint8_t payloadBytes;
+  bool valid;
 };
 
-constexpr size_t kSensorCount = kBoardConfig.sensorCount;
-SensorRuntime gSensorRuntime[kSensorCount > 0 ? kSensorCount : 1];
+constexpr size_t kGroupCount = kBoardConfig.groupCount;
+GroupRuntime gGroupRuntime[kGroupCount > 0 ? kGroupCount : 1];
 
 void CallIfSet(void (*hook)()) {
   if (hook != nullptr) {
@@ -42,11 +46,15 @@ const SensorContext *GetSensorContext(const SensorDescriptor &desc) {
   return static_cast<const SensorContext *>(desc.context);
 }
 
-size_t CountActiveSensors() {
+bool IsActiveGroup(const GroupRuntime &runtime) {
+  return runtime.valid && runtime.group != nullptr && runtime.payloadBytes > 0U &&
+         runtime.group->pollIntervalMs > 0U;
+}
+
+size_t CountActiveGroups() {
   size_t count = 0;
-  for (size_t i = 0; i < kBoardConfig.sensorCount; ++i) {
-    const SensorContext *context = GetSensorContext(kBoardConfig.sensors[i]);
-    if (context != nullptr && context->pollIntervalMs > 0U) {
+  for (size_t i = 0; i < kBoardConfig.groupCount; ++i) {
+    if (IsActiveGroup(gGroupRuntime[i])) {
       ++count;
     }
   }
@@ -81,6 +89,69 @@ bool ConfigureCan() {
   settings.mRequestedMode = ACAN2517FDSettings::NormalFD;
   const uint32_t errorCode = gCanDriver.begin(settings, OnCanInterrupt);
   return errorCode == 0U;
+}
+
+uint8_t ComputeGroupPayloadBytes(const MessageGroupConfig &group, bool &valid) {
+  if (group.sensors == nullptr || group.sensorCount == 0U) {
+    valid = false;
+    return 0U;
+  }
+
+  uint16_t total = 0U;
+  for (size_t i = 0; i < group.sensorCount; ++i) {
+    const SensorContext *context = GetSensorContext(group.sensors[i]);
+    if (context == nullptr) {
+      valid = false;
+      return 0U;
+    }
+    total += context->payloadSize;
+    if (total > kMaxCanFdPayloadBytes) {
+      valid = false;
+      return 0U;
+    }
+  }
+
+  valid = true;
+  return static_cast<uint8_t>(total);
+}
+
+void RescheduleGroups(const uint32_t nowMs) {
+  const size_t activeCount = CountActiveGroups();
+  size_t activeIndex = 0U;
+  for (size_t i = 0; i < kBoardConfig.groupCount; ++i) {
+    GroupRuntime &runtime = gGroupRuntime[i];
+    const uint16_t pollIntervalMs =
+        runtime.group != nullptr ? runtime.group->pollIntervalMs : 0U;
+    if (IsActiveGroup(runtime)) {
+      runtime.nextPollAtMs =
+          StaggeredFirstPollTime(nowMs, pollIntervalMs, activeIndex, activeCount);
+      ++activeIndex;
+    } else {
+      runtime.nextPollAtMs = nowMs + pollIntervalMs;
+    }
+  }
+}
+
+bool SampleGroupMember(const SensorDescriptor &desc, const SensorContext &context,
+                       uint8_t *dst) {
+  if (context.payloadSize == 0U) {
+    return true;
+  }
+  if (dst == nullptr || desc.sample == nullptr) {
+    return false;
+  }
+
+  CANFDMessage sampleFrame;
+  sampleFrame.len = 0U;
+  if (!desc.sample(desc.context, sampleFrame)) {
+    return false;
+  }
+  if (sampleFrame.len != context.payloadSize) {
+    return false;
+  }
+
+  memcpy(dst, sampleFrame.data, context.payloadSize);
+  return true;
 }
 
 bool MatchesCommand(const CANFDMessage &frame, const uint32_t expectedId,
@@ -121,45 +192,40 @@ void ServiceIncomingCan() {
 
 void InitializeSensors() {
   const uint32_t now = millis();
-  const size_t activeCount = CountActiveSensors();
-  size_t activeIndex = 0;
-  for (size_t i = 0; i < kBoardConfig.sensorCount; ++i) {
-    SensorRuntime &runtime = gSensorRuntime[i];
-    runtime.desc = &kBoardConfig.sensors[i];
-    runtime.context = GetSensorContext(*runtime.desc);
-    const uint16_t pollIntervalMs =
-        runtime.context != nullptr ? runtime.context->pollIntervalMs : 0U;
-    if (runtime.context != nullptr && pollIntervalMs > 0U) {
-      runtime.nextPollAtMs =
-          StaggeredFirstPollTime(now, pollIntervalMs, activeIndex, activeCount);
-      ++activeIndex;
-    } else {
-      runtime.nextPollAtMs = now + pollIntervalMs;
+  for (size_t i = 0; i < kBoardConfig.groupCount; ++i) {
+    GroupRuntime &runtime = gGroupRuntime[i];
+    runtime.group = &kBoardConfig.groups[i];
+    runtime.payloadBytes = ComputeGroupPayloadBytes(*runtime.group, runtime.valid);
+    runtime.nextPollAtMs = now;
+
+    if (!runtime.valid) {
+      PrintGroupConfigError(runtime.group->name, now);
     }
 
-    if (runtime.context == nullptr) {
+    if (runtime.group->sensors == nullptr) {
       continue;
     }
 
-    if (runtime.desc->begin != nullptr) {
-      const bool ok = runtime.desc->begin(runtime.desc->context);
+    for (size_t sensorIndex = 0; sensorIndex < runtime.group->sensorCount;
+         ++sensorIndex) {
+      const SensorDescriptor &desc = runtime.group->sensors[sensorIndex];
+      if (desc.context == nullptr || desc.begin == nullptr) {
+        continue;
+      }
+
+      const bool ok = desc.begin(desc.context);
       (void)ok;  // TODO: surface init failures via CAN or a status LED.
     }
   }
+
+  RescheduleGroups(millis());
 }
 
-void PollSensors(const uint32_t nowMs) {
-  for (size_t i = 0; i < kBoardConfig.sensorCount; ++i) {
-    SensorRuntime &runtime = gSensorRuntime[i];
-    const SensorDescriptor &desc = *runtime.desc;
-    const SensorContext *context = runtime.context;
-
-    if (context == nullptr) {
+void PollGroups(const uint32_t nowMs) {
+  for (size_t i = 0; i < kBoardConfig.groupCount; ++i) {
+    GroupRuntime &runtime = gGroupRuntime[i];
+    if (!IsActiveGroup(runtime)) {
       continue;
-    }
-
-    if (context->pollIntervalMs == 0U) {
-      continue;  // Disabled sensor.
     }
 
     if (nowMs < runtime.nextPollAtMs) {
@@ -168,7 +234,7 @@ void PollSensors(const uint32_t nowMs) {
 
     {
       const uint32_t scheduledAt = runtime.nextPollAtMs;
-      const uint32_t intervalMs = context->pollIntervalMs;
+      const uint32_t intervalMs = runtime.group->pollIntervalMs;
       uint32_t nextPoll = scheduledAt + intervalMs;
       if (nextPoll <= nowMs) {
         nextPoll = nowMs + intervalMs;
@@ -176,63 +242,66 @@ void PollSensors(const uint32_t nowMs) {
       runtime.nextPollAtMs = nextPoll;
     }
 
-    if (desc.sample == nullptr) {
-      continue;
-    }
-
     CANFDMessage frame;
-    frame.id = context->canId;
+    frame.id = runtime.group->canId;
     frame.ext = kBoardConfig.useExtendedIds;
-    frame.len = 0;
+    frame.len = runtime.payloadBytes;
+    memset(frame.data, 0, sizeof(frame.data));
 
-    // Sample function populates frame len and data, true if successful
-    if (!desc.sample(desc.context, frame)) {
-      continue;  // If sample returns false, skip trying to send
+    uint8_t payloadOffset = 0U;
+    for (size_t sensorIndex = 0; sensorIndex < runtime.group->sensorCount;
+         ++sensorIndex) {
+      const SensorDescriptor &desc = runtime.group->sensors[sensorIndex];
+      const SensorContext *context = GetSensorContext(desc);
+      if (context == nullptr) {
+        continue;
+      }
+
+      if (!SampleGroupMember(desc, *context, &frame.data[payloadOffset])) {
+        PrintGroupMemberZeroFill(runtime.group->name, context->name, nowMs);
+      }
+      payloadOffset += context->payloadSize;
     }
 
+    frame.pad();
     const bool sent = gCanDriver.tryToSend(frame);
-    // TEMP: Toggle pin on CAN TX for scope frequency checks (remove when done).
-    gCanTxToggleState = !gCanTxToggleState;
-    digitalWrite(kCanTxTogglePin, gCanTxToggleState ? HIGH : LOW);
-
 
 #if BAJACAN_ENABLE_DEBUG_PRINTS
-    PrintSensorPoll(context->name, frame, nowMs);
+    PrintGroupPoll(runtime.group->name, frame, nowMs);
     PrintCanTxResult(frame, nowMs, sent);
 #endif
   }
 }
 
 void SuspendSensorsForSleep() {
-  for (size_t i = 0; i < kBoardConfig.sensorCount; ++i) {
-    const SensorDescriptor &desc = *gSensorRuntime[i].desc;
-    if (desc.suspend != nullptr) {
-      desc.suspend(desc.context);
+  for (size_t i = 0; i < kBoardConfig.groupCount; ++i) {
+    const MessageGroupConfig &group = kBoardConfig.groups[i];
+    if (group.sensors == nullptr) {
+      continue;
+    }
+    for (size_t sensorIndex = 0; sensorIndex < group.sensorCount; ++sensorIndex) {
+      const SensorDescriptor &desc = group.sensors[sensorIndex];
+      if (desc.suspend != nullptr) {
+        desc.suspend(desc.context);
+      }
     }
   }
 }
 
 void ResumeSensorsAfterWake() {
-  const uint32_t now = millis();
-  const size_t activeCount = CountActiveSensors();
-  size_t activeIndex = 0;
-  for (size_t i = 0; i < kBoardConfig.sensorCount; ++i) {
-    SensorRuntime &runtime = gSensorRuntime[i];
-    const SensorDescriptor &desc = *runtime.desc;
-    const SensorContext *context = runtime.context;
-    const uint16_t pollIntervalMs =
-        context != nullptr ? context->pollIntervalMs : 0U;
-    if (context != nullptr && pollIntervalMs > 0U) {
-      runtime.nextPollAtMs =
-          StaggeredFirstPollTime(now, pollIntervalMs, activeIndex, activeCount);
-      ++activeIndex;
-    } else {
-      runtime.nextPollAtMs = now + pollIntervalMs;
+  for (size_t i = 0; i < kBoardConfig.groupCount; ++i) {
+    const MessageGroupConfig &group = kBoardConfig.groups[i];
+    if (group.sensors == nullptr) {
+      continue;
     }
-    if (desc.resume != nullptr) {
-      desc.resume(desc.context);
+    for (size_t sensorIndex = 0; sensorIndex < group.sensorCount; ++sensorIndex) {
+      const SensorDescriptor &desc = group.sensors[sensorIndex];
+      if (desc.resume != nullptr) {
+        desc.resume(desc.context);
+      }
     }
   }
+  RescheduleGroups(millis());
 }
 
 void EnterLowPowerSleep() {
@@ -278,8 +347,6 @@ void setup() {
   pinMode(kBoardConfig.canCsPin, OUTPUT);
   pinMode(kBoardConfig.canIntPin, INPUT_PULLUP);
   pinMode(kBoardConfig.canStbyPin, OUTPUT);
-  // TEMP: Toggle pin on CAN TX for scope frequency checks (remove when done).
-  pinMode(kCanTxTogglePin, OUTPUT);
   SPI.begin();
 #if BAJACAN_ENABLE_DEBUG_PRINTS
   Serial.begin(115200); // Serial0 for debug
@@ -306,13 +373,13 @@ void loop() {
   WakeIfRequested();
 
   if (gNodeState == NodeState::Sleeping) {
-    EnterLowPowerSleep();  // Pauses after execution until interrupt
-    sleep_disable();       // Wake CPU immediately on interrupt
+    EnterLowPowerSleep();  // Pauses after execution until interrupt  <<==  PAUSED HERE UNTIL WAKE INTERRUPT
+    sleep_disable();       // Wake CPU immediately on interrupt       <<==  RESUMES BY EXECUTING THIS LINE
     WakeIfRequested();     // Wake flag set by ISR
     return;
   }
 
-  PollSensors(now);
+  PollGroups(now);
 
   if (gSleepRequested) {
     PrepareForSleep();

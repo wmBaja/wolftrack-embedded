@@ -1,0 +1,12 @@
+{
+  "name": "i2c_sensor",
+  "version": "0.1.0",
+  "description": "An example generic I2C sensor implementation",
+  "dependencies": [
+    {
+      "name": "ACAN2517FD",
+      "owner": "pierremolinaro",
+      "version": "^2.1.16"
+    }
+  ]
+}
