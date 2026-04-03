@@ -1,0 +1,17 @@
+{
+  "name": "as5600_sensor",
+  "version": "0.1.0",
+  "description": "AS5600 magnetic encoder sensor wrapper for Baja CAN",
+  "dependencies": [
+    {
+      "name": "ACAN2517FD",
+      "owner": "pierremolinaro",
+      "version": "^2.1.16"
+    },
+    {
+      "name": "AS5600",
+      "owner": "robtillaart",
+      "version": "^0.6.7"
+    }
+  ]
+}

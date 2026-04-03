@@ -8,6 +8,7 @@
 #include "config.h"        // Common contracts for board configs
 #include "debug_print.h"
 #include <analog_sensor.h>
+#include <as5600_sensor.h>
 #include <can_driver.h>
 // Force PlatformIO LDF to discover drivers referenced only by board configs.
 #include <i2c_sensor.h>
