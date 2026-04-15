@@ -3,6 +3,7 @@
 #include <analog_sensor.h>
 #include <as5600_sensor.h>
 #include <config.h>
+#include <mlx90614_sensor.h>
 
 // Example hooks; set to nullptr when unused.
 constexpr BoardHooks kExampleHooks{
@@ -12,6 +13,7 @@ constexpr BoardHooks kExampleHooks{
 };
 
 inline AS5600SensorRuntime gExampleEncoderRuntime{};
+inline MLX90614SensorRuntime gExampleIrSensorRuntime{};
 
 // Example grouped sensors table; add entries as real sensors are implemented.
 constexpr AS5600SensorContext kExampleEncoder{
@@ -26,43 +28,54 @@ constexpr AS5600SensorContext kExampleEncoder{
     .offsetCentiDegrees = 0,
 };
 
-constexpr AnalogSensorContext kFrontBrakePressureSensor{
+constexpr MLX90614SensorContext kExampleIrTemperatureSensor{
     .base = {
-        .name = "Front Brake Pressure",
-        .payloadSize = kAnalogSensorPayloadSize,
+        .name = "IR Temperature",
+        .payloadSize = kMLX90614SensorPayloadSize,
     },
-    .pin = A0,
+    .runtime = &gExampleIrSensorRuntime,
+    .i2cAddress = MLX90614_I2CADDR,
+    .clockHz = 100000,
 };
 
-constexpr AnalogSensorContext kRearBrakePressureSensor{
-    .base = {
-        .name = "Rear Brake Pressure",
-        .payloadSize = kAnalogSensorPayloadSize,
-    },
-    .pin = A1,
-};
+// constexpr AnalogSensorContext kFrontBrakePressureSensor{
+//     .base = {
+//         .name = "Front Brake Pressure",
+//         .payloadSize = kAnalogSensorPayloadSize,
+//     },
+//     .pin = A0,
+// };
 
-constexpr SensorDescriptor kFastGroupSensors[] = {
-    MakeAS5600Sensor(&kExampleEncoder),
-    MakeAnalogSensor(&kFrontBrakePressureSensor),
-};
+// constexpr AnalogSensorContext kRearBrakePressureSensor{
+//     .base = {
+//         .name = "Rear Brake Pressure",
+//         .payloadSize = kAnalogSensorPayloadSize,
+//     },
+//     .pin = A1,
+// };
+
+// constexpr SensorDescriptor kFastGroupSensors[] = {
+//     MakeAS5600Sensor(&kExampleEncoder),
+//     // MakeAnalogSensor(&kFrontBrakePressureSensor),
+// };
 
 constexpr SensorDescriptor kSlowGroupSensors[] = {
-    MakeAnalogSensor(&kRearBrakePressureSensor),
+    MakeMLX90614Sensor(&kExampleIrTemperatureSensor),
+    // MakeAnalogSensor(&kRearBrakePressureSensor),
 };
 
 constexpr MessageGroupConfig kExampleGroups[] = {
-    {
-        .name = "Fast Sensors",
-        .canId = 0x100,
-        .pollIntervalMs = 10,
-        .sensors = kFastGroupSensors,
-        .sensorCount = sizeof(kFastGroupSensors) / sizeof(kFastGroupSensors[0]),
-    },
+    // {
+    //     .name = "Fast Sensors",
+    //     .canId = 0x100,
+    //     .pollIntervalMs = 10,
+    //     .sensors = kFastGroupSensors,
+    //     .sensorCount = sizeof(kFastGroupSensors) / sizeof(kFastGroupSensors[0]),
+    // },
     {
         .name = "Slow Sensors",
         .canId = 0x101,
-        .pollIntervalMs = 20,
+        .pollIntervalMs = 100,
         .sensors = kSlowGroupSensors,
         .sensorCount = sizeof(kSlowGroupSensors) / sizeof(kSlowGroupSensors[0]),
     },

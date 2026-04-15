@@ -1,0 +1,17 @@
+{
+  "name": "mlx90614_sensor",
+  "version": "0.1.0",
+  "description": "MLX90614 IR temperature sensor wrapper for Baja CAN",
+  "dependencies": [
+    {
+      "name": "ACAN2517FD",
+      "owner": "pierremolinaro",
+      "version": "^2.1.16"
+    },
+    {
+      "name": "DFRobot_MLX90614",
+      "owner": "dfrobot",
+      "version": "^1.0.4"
+    }
+  ]
+}

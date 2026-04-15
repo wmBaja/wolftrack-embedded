@@ -1,0 +1,17 @@
+{
+  "name": "bno085_sensor",
+  "version": "0.1.0",
+  "description": "BNO085 IMU sensor wrapper for Baja CAN",
+  "dependencies": [
+    {
+      "name": "ACAN2517FD",
+      "owner": "pierremolinaro",
+      "version": "^2.1.16"
+    },
+    {
+      "name": "SparkFun BNO08x Cortex Based IMU",
+      "owner": "sparkfun",
+      "version": "^1.0.6"
+    }
+  ]
+}
