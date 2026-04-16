@@ -54,12 +54,19 @@ class MLX90614Driver : public DFRobot_MLX90614_I2C {
 
     wire_->begin();
     ApplyConfiguredClock();
+    delay(50);
+
+    uint8_t idBuf[2] = {};
+    int result = ReadIdRegister(idBuf);
+    if (result == NO_ERR) {
+      return result;
+    }
 
     enterSleepMode(false);
     ApplyConfiguredClock();
     delay(50);
 
-    const int result = DFRobot_MLX90614::begin();
+    result = ReadIdRegister(idBuf);
     ApplyConfiguredClock();
     return result;
   }
@@ -69,6 +76,17 @@ class MLX90614Driver : public DFRobot_MLX90614_I2C {
   }
 
  private:
+  int ReadIdRegister(uint8_t *buf) {
+    if (buf == nullptr || ReadRegister(MLX90614_ID_NUMBER, buf) != 2U) {
+      return ERR_DATA_BUS;
+    }
+
+    const uint16_t id =
+        static_cast<uint16_t>(buf[0]) |
+        (static_cast<uint16_t>(buf[1]) << 8);
+    return id == 0U ? ERR_IC_VERSION : NO_ERR;
+  }
+
   void ApplyConfiguredClock() {
     if (wire_ != nullptr && clockHz_ != 0U) {
       wire_->setClock(clockHz_);
@@ -83,6 +101,9 @@ struct MLX90614SensorRuntime {
   MLX90614Driver driver;
   bool initialized = false;
   int16_t lastError = kMLX90614SensorErrorNone;
+  uint16_t cachedEmissivityReg = 0U;
+  bool emissivityCached = false;
+  uint32_t nextEmissivityRefreshAtMs = 0U;
 };
 
 struct MLX90614SensorContext {
