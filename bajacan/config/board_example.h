@@ -2,8 +2,10 @@
 
 #include <analog_sensor.h>
 #include <as5600_sensor.h>
+#include <bno085_sensor.h>
 #include <config.h>
 #include <mlx90614_sensor.h>
+#include <pwm_angle_sensor.h>
 
 // Example hooks; set to nullptr when unused.
 constexpr BoardHooks kExampleHooks{
@@ -13,30 +15,46 @@ constexpr BoardHooks kExampleHooks{
 };
 
 inline AS5600SensorRuntime gExampleEncoderRuntime{};
+inline BNO085SensorRuntime gExampleImuRuntime{};
 inline MLX90614SensorRuntime gExampleIrSensorRuntime{};
+inline PWMAngleSensorRuntime gExamplePwmAngleRuntime{};
 
 // Example grouped sensors table; add entries as real sensors are implemented.
-constexpr AS5600SensorContext kExampleEncoder{
+
+constexpr BNO085SensorContext kExampleIMU{
     .base = {
-        .name = "Steering Encoder",
-        .payloadSize = kAS5600SensorPayloadSize,
+        .name = "IMU",
+        .payloadSize = kBNO085SensorPayloadSize,
     },
-    .runtime = &gExampleEncoderRuntime,
+    .runtime = &gExampleImuRuntime,
+    .i2cAddress = 0x4A,
     .clockHz = 400000,
-    .directionPin = AS5600_SW_DIRECTION_PIN,
-    .direction = AS5600_CLOCK_WISE,
-    .offsetCentiDegrees = 0,
+    .interruptPin = -1,
+    .resetPin = -1,
+    .reportIntervalMs = kBNO085DefaultReportIntervalMs,
 };
 
-constexpr MLX90614SensorContext kExampleIrTemperatureSensor{
-    .base = {
-        .name = "IR Temperature",
-        .payloadSize = kMLX90614SensorPayloadSize,
-    },
-    .runtime = &gExampleIrSensorRuntime,
-    .i2cAddress = MLX90614_I2CADDR,
-    .clockHz = 100000,
-};
+// constexpr AS5600SensorContext kExampleEncoder{
+//     .base = {
+//         .name = "Steering Encoder",
+//         .payloadSize = kAS5600SensorPayloadSize,
+//     },
+//     .runtime = &gExampleEncoderRuntime,
+//     .clockHz = 400000,
+//     .directionPin = AS5600_SW_DIRECTION_PIN,
+//     .direction = AS5600_CLOCK_WISE,
+//     .offsetCentiDegrees = 0,
+// };
+
+// constexpr MLX90614SensorContext kExampleIrTemperatureSensor{
+//     .base = {
+//         .name = "IR Temperature",
+//         .payloadSize = kMLX90614SensorPayloadSize,
+//     },
+//     .runtime = &gExampleIrSensorRuntime,
+//     .i2cAddress = MLX90614_I2CADDR,
+//     .clockHz = 100000,
+// };
 
 // constexpr AnalogSensorContext kFrontBrakePressureSensor{
 //     .base = {
@@ -54,13 +72,24 @@ constexpr MLX90614SensorContext kExampleIrTemperatureSensor{
 //     .pin = A1,
 // };
 
+// constexpr PWMAngleSensorContext kExamplePwmAngleSensor{
+//     .base = {
+//         .name = "AS5600 PWM",
+//         .payloadSize = kPWMAngleSensorPayloadSize,
+//     },
+//     .runtime = &gExamplePwmAngleRuntime,
+//     .pin = 2,
+//     .timeoutMicros = kPWMAngleDefaultTimeoutMicros,
+// };
+
 // constexpr SensorDescriptor kFastGroupSensors[] = {
 //     MakeAS5600Sensor(&kExampleEncoder),
+//     // MakePWMAngleSensor(&kExamplePwmAngleSensor),
 //     // MakeAnalogSensor(&kFrontBrakePressureSensor),
 // };
 
 constexpr SensorDescriptor kSlowGroupSensors[] = {
-    MakeMLX90614Sensor(&kExampleIrTemperatureSensor),
+    MakeBNO085Sensor(&kExampleIMU),
     // MakeAnalogSensor(&kRearBrakePressureSensor),
 };
 

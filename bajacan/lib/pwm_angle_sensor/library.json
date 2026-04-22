@@ -1,0 +1,17 @@
+{
+  "name": "pwm_angle_sensor",
+  "version": "0.1.0",
+  "description": "PWM angle and RPM sensor wrapper for Baja CAN",
+  "dependencies": [
+    {
+      "name": "ACAN2517FD",
+      "owner": "pierremolinaro",
+      "version": "^2.1.16"
+    },
+    {
+      "name": "AS5600",
+      "owner": "robtillaart",
+      "version": "^0.6.7"
+    }
+  ]
+}
