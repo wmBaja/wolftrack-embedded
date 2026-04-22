@@ -14,6 +14,7 @@
 // Force PlatformIO LDF to discover drivers referenced only by board configs.
 #include <i2c_sensor.h>
 #include <mlx90614_sensor.h>
+#include <pwm_angle_sensor.h>
 #include <sensors_config.h>  // Provided by the selected board environment
 
 namespace {
@@ -85,13 +86,12 @@ void OnCanInterrupt() {
   gCanDriver.isr();
 }
 
-bool ConfigureCan() {
+uint32_t ConfigureCan() {
   ACAN2517FDSettings settings{kBoardConfig.canOscillator,
                               kBoardConfig.arbitrationBitrate,
                               kBoardConfig.dataBitrateFactor};
   settings.mRequestedMode = ACAN2517FDSettings::NormalFD;
-  const uint32_t errorCode = gCanDriver.begin(settings, OnCanInterrupt);
-  return errorCode == 0U;
+  return gCanDriver.begin(settings, OnCanInterrupt);
 }
 
 uint8_t ComputeGroupPayloadBytes(const MessageGroupConfig &group, bool &valid) {
@@ -355,10 +355,16 @@ void setup() {
   Serial.begin(115200); // Serial0 for debug
 #endif
 
-  if (!ConfigureCan()) {
-    // TODO: Surface CAN init failure via LED blink or debug UART.
+  const uint32_t canErrorCode = ConfigureCan();
+  if (canErrorCode != 0U) {
     while (true) {
+#if BAJACAN_ENABLE_DEBUG_PRINTS
+      Serial.print("CAN init failed error=0x");
+      Serial.println(canErrorCode, HEX);
+      delay(1000);
+#else
       delay(100);
+#endif
     }
   }
   gCanDriver.setWakeHandler(OnWakeFlag);
