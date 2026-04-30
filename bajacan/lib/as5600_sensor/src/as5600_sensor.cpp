@@ -17,6 +17,13 @@ AS5600 *GetDriver(const AS5600SensorContext &config) {
   return &config.runtime->driver;
 }
 
+TwoWire *GetWire(const AS5600SensorContext &config) {
+  if (config.runtime == nullptr) {
+    return nullptr;
+  }
+  return config.runtime->wire;
+}
+
 void CopySampleToFrame(const AS5600SampleFrame &sample, CANFDMessage &outFrame) {
   outFrame.len = sizeof(sample);
   memcpy(outFrame.data, &sample, sizeof(sample));
@@ -41,9 +48,16 @@ bool AS5600SensorBegin(const void *ctx) {
 
   config->runtime->initialized = false;
 
-  Wire.begin();
+  TwoWire *wire = GetWire(*config);
+  if (wire == nullptr) {
+    return false;
+  }
+
+  config->runtime->driver = AS5600(wire);
+
+  wire->begin();
   if (config->clockHz != 0U) {
-    Wire.setClock(config->clockHz);
+    wire->setClock(config->clockHz);
   }
 
   AS5600 *driver = GetDriver(*config);

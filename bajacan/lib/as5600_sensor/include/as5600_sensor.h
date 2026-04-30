@@ -36,8 +36,10 @@ constexpr uint8_t kAS5600SensorPayloadSize =
     static_cast<uint8_t>(sizeof(AS5600SampleFrame));
 
 struct AS5600SensorRuntime {
-  AS5600SensorRuntime() : driver(&Wire) {}
+  explicit AS5600SensorRuntime(TwoWire *wireBus = &Wire)
+      : wire(wireBus), driver(wireBus) {}
 
+  TwoWire *wire = &Wire;
   AS5600 driver;
   bool initialized = false;
 };

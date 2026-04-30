@@ -25,9 +25,17 @@ MLX90614Driver *GetDriver(const MLX90614SensorContext &config) {
   return &config.runtime->driver;
 }
 
+TwoWire *GetWire(const MLX90614SensorContext &config) {
+  if (config.runtime == nullptr) {
+    return nullptr;
+  }
+  return config.runtime->wire;
+}
+
 void ApplyClock(const MLX90614SensorContext &config) {
-  if (config.clockHz != 0U) {
-    Wire.setClock(config.clockHz);
+  TwoWire *wire = GetWire(config);
+  if (wire != nullptr && config.clockHz != 0U) {
+    wire->setClock(config.clockHz);
   }
 }
 
@@ -196,8 +204,14 @@ bool MLX90614SensorBegin(const void *ctx) {
   config->runtime->nextEmissivityRefreshAtMs = 0U;
 
   for (uint8_t attempt = 1U; attempt <= kMLX90614BeginAttempts; ++attempt) {
+    TwoWire *wire = GetWire(*config);
+    if (wire == nullptr) {
+      config->runtime->lastError = kMLX90614SensorErrorBeginDataBus;
+      return false;
+    }
+
     config->runtime->driver =
-        MLX90614Driver(config->i2cAddress, &Wire, config->clockHz);
+        MLX90614Driver(config->i2cAddress, wire, config->clockHz);
 
     MLX90614Driver *driver = GetDriver(*config);
     if (driver == nullptr) {

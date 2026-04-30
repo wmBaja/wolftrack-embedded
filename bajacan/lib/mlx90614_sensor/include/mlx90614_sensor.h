@@ -98,6 +98,10 @@ class MLX90614Driver : public DFRobot_MLX90614_I2C {
 };
 
 struct MLX90614SensorRuntime {
+  explicit MLX90614SensorRuntime(TwoWire *wireBus = &Wire)
+      : wire(wireBus), driver(MLX90614_I2CADDR, wireBus, 0U) {}
+
+  TwoWire *wire = &Wire;
   MLX90614Driver driver;
   bool initialized = false;
   int16_t lastError = kMLX90614SensorErrorNone;
