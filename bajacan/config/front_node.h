@@ -15,12 +15,13 @@ constexpr BoardHooks kExampleHooks{
     nullptr   // afterWake
 };
 
+
 // Runtime objects for sensors
 inline AS5600SensorRuntime gSteeringAngleRuntime{&Wire1};
 inline BNO085SensorRuntime gImuRuntime{};
 
-// Grouped sensors table; add entries as real sensors are implemented.
 
+// Sensor contexts
 constexpr BNO085SensorContext kIMU{
     .base = {
         .name = "IMU",
@@ -78,6 +79,8 @@ constexpr AnalogSensorContext kFRSuspensionSensor{
     .pin = PIN_PD5,
 };
 
+
+// Sensor Groups
 constexpr SensorDescriptor kIMUSensorGroup[] = {
     MakeBNO085Sensor(&kIMU),
 };
@@ -90,6 +93,8 @@ constexpr SensorDescriptor kFastGroupSensors[] = {
     MakeAnalogSensor(&kFRSuspensionSensor),
 };
 
+
+// List of groups (to give to board config)
 constexpr MessageGroupConfig kFrontGroups[] = {
     {
         .name = "Fast Sensors",
@@ -107,7 +112,8 @@ constexpr MessageGroupConfig kFrontGroups[] = {
     },
 };
 
-// Board Config
+
+// Board Config (last two fields use list of sensor groups)
 constexpr BoardConfig kBoardConfig{
     kDefaultCanCsPin,
     kDefaultCanIntPin,
