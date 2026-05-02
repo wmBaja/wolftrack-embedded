@@ -6,18 +6,18 @@
 
 namespace {
 
-const BNO085SensorContext *GetBNO085Context(const void *ctx) {
-  return static_cast<const BNO085SensorContext *>(ctx);
+const BNO085SubSensorContext *GetBNO085Context(const void *ctx) {
+  return static_cast<const BNO085SubSensorContext *>(ctx);
 }
 
-BNO08x *GetDriver(const BNO085SensorContext &config) {
+BNO08x *GetDriver(const BNO085SubSensorContext &config) {
   if (config.runtime == nullptr) {
     return nullptr;
   }
   return &config.runtime->driver;
 }
 
-uint16_t GetReportIntervalMs(const BNO085SensorContext &config) {
+uint16_t GetReportIntervalMs(const BNO085SubSensorContext &config) {
   if (config.reportIntervalMs == 0U) {
     return kBNO085DefaultReportIntervalMs;
   }
@@ -38,35 +38,38 @@ void ResetCachedSample(BNO085SensorRuntime &runtime) {
   runtime.rotationVectorAccuracyRad = 0.0f;
 }
 
-template <typename Frame>
-void FillCommonFields(const BNO085SensorRuntime &runtime, Frame &frame) {
+void CopyDataRuntimeToFrame(const BNO085SensorRuntime &runtime, CANFDMessage &outFrame) {
+  BNO085DataSampleFrame frame = {};
   frame.version = kBNO085SampleFrameVersion;
   frame.validMask = runtime.validMask;
-  frame.accelerometerAccuracy = runtime.accelerometerAccuracy;
-  frame.gyroAccuracy = runtime.gyroAccuracy;
-  frame.linearAccelerationAccuracy = runtime.linearAccelerationAccuracy;
-  frame.rotationVectorAccuracy = runtime.rotationVectorAccuracy;
-  frame.error = runtime.lastError;
   frame.accelerometer = runtime.accelerometer;
   frame.angularVelocity = runtime.angularVelocity;
   frame.linearAcceleration = runtime.linearAcceleration;
-}
 
-void CopyRuntimeToFrame(const BNO085SensorRuntime &runtime,
-                        CANFDMessage &outFrame) {
-  BNO085SampleFrame frame = {};
-  FillCommonFields(runtime, frame);
-
-  if constexpr (kBNO085SensorHasRotationVector) {
+  if constexpr (kBNO085DataSensorHasRotationVector) {
     frame.rotationVector = runtime.rotationVector;
-    frame.rotationVectorAccuracyRad = runtime.rotationVectorAccuracyRad;
   }
 
   outFrame.len = sizeof(frame);
   memcpy(outFrame.data, &frame, sizeof(frame));
 }
 
-bool ConfigureReports(const BNO085SensorContext &config) {
+void CopyStatsRuntimeToFrame(const BNO085SensorRuntime &runtime, CANFDMessage &outFrame) {
+  BNO085StatsSampleFrame frame = {};
+  frame.version = kBNO085SampleFrameVersion;
+  frame.validMask = runtime.validMask;
+  frame.error = runtime.lastError;
+  frame.accelerometerAccuracy = runtime.accelerometerAccuracy;
+  frame.gyroAccuracy = runtime.gyroAccuracy;
+  frame.linearAccelerationAccuracy = runtime.linearAccelerationAccuracy;
+  frame.rotationVectorAccuracy = runtime.rotationVectorAccuracy;
+  frame.rotationVectorAccuracyRad = runtime.rotationVectorAccuracyRad;
+
+  outFrame.len = sizeof(frame);
+  memcpy(outFrame.data, &frame, sizeof(frame));
+}
+
+bool ConfigureReports(const BNO085SubSensorContext &config) {
   if (config.runtime == nullptr || !config.runtime->initialized) {
     return false;
   }
@@ -76,7 +79,8 @@ bool ConfigureReports(const BNO085SensorContext &config) {
     return false;
   }
 
-  if (config.runtime->reportsConfigured) {
+  // Use a single flag since we need all reports for both data and stats
+  if (config.runtime->dataReportsConfigured) {
     return true;
   }
 
@@ -85,11 +89,12 @@ bool ConfigureReports(const BNO085SensorContext &config) {
   ok = ok && driver->enableGyro(intervalMs);
   ok = ok && driver->enableLinearAccelerometer(intervalMs);
 
-  if constexpr (kBNO085SensorHasRotationVector) {
+  if constexpr (kBNO085DataSensorHasRotationVector) {
     ok = ok && driver->enableRotationVector(intervalMs);
   }
 
-  config.runtime->reportsConfigured = ok;
+  config.runtime->dataReportsConfigured = ok;
+  config.runtime->statsReportsConfigured = ok;
   config.runtime->lastError =
       ok ? kBNO085SensorErrorNone : kBNO085SensorErrorConfigureReportsFailed;
   return ok;
@@ -128,17 +133,15 @@ void CaptureSensorEvent(BNO085SensorRuntime &runtime, BNO08x &driver) {
       break;
 
     case SENSOR_REPORTID_ROTATION_VECTOR:
-      if constexpr (kBNO085SensorHasRotationVector) {
-        runtime.rotationVector = {
-            driver.getQuatI(),
-            driver.getQuatJ(),
-            driver.getQuatK(),
-            driver.getQuatReal(),
-        };
-        runtime.rotationVectorAccuracy = driver.getQuatAccuracy();
-        runtime.rotationVectorAccuracyRad = driver.getQuatRadianAccuracy();
-        runtime.validMask |= kBNO085ReportMaskRotationVector;
-      }
+      runtime.rotationVector = {
+          driver.getQuatI(),
+          driver.getQuatJ(),
+          driver.getQuatK(),
+          driver.getQuatReal(),
+      };
+      runtime.rotationVectorAccuracy = driver.getQuatAccuracy();
+      runtime.rotationVectorAccuracyRad = driver.getQuatRadianAccuracy();
+      runtime.validMask |= kBNO085ReportMaskRotationVector;
       break;
 
     default:
@@ -146,7 +149,7 @@ void CaptureSensorEvent(BNO085SensorRuntime &runtime, BNO08x &driver) {
   }
 }
 
-void RefreshCachedSample(const BNO085SensorContext &config) {
+void RefreshCachedSample(const BNO085SubSensorContext &config) {
   if (config.runtime == nullptr || !config.runtime->initialized) {
     return;
   }
@@ -157,7 +160,8 @@ void RefreshCachedSample(const BNO085SensorContext &config) {
   }
 
   if (driver->wasReset()) {
-    config.runtime->reportsConfigured = false;
+    config.runtime->dataReportsConfigured = false;
+    config.runtime->statsReportsConfigured = false;
     ResetCachedSample(*config.runtime);
   }
 
@@ -171,13 +175,19 @@ void RefreshCachedSample(const BNO085SensorContext &config) {
 }  // namespace
 
 bool BNO085SensorBegin(const void *ctx) {
-  const BNO085SensorContext *config = GetBNO085Context(ctx);
+  const BNO085SubSensorContext *config = GetBNO085Context(ctx);
   if (config == nullptr || config->runtime == nullptr) {
     return false;
   }
 
+  // If already initialized by the other sub-sensor, just return success
+  if (config->runtime->initialized) {
+    return true;
+  }
+
   config->runtime->initialized = false;
-  config->runtime->reportsConfigured = false;
+  config->runtime->dataReportsConfigured = false;
+  config->runtime->statsReportsConfigured = false;
   ResetCachedSample(*config->runtime);
 
   Wire.begin();
@@ -198,7 +208,6 @@ bool BNO085SensorBegin(const void *ctx) {
       return ConfigureReports(*config);
     }
 
-    // Delay and retry to allow Adafruit boards time to boot
     if (attempt < 5U) {
       delay(100);
     }
@@ -208,8 +217,8 @@ bool BNO085SensorBegin(const void *ctx) {
   return false;
 }
 
-bool BNO085SensorSample(const void *ctx, CANFDMessage &outFrame) {
-  const BNO085SensorContext *config = GetBNO085Context(ctx);
+bool BNO085DataSensorSample(const void *ctx, CANFDMessage &outFrame) {
+  const BNO085SubSensorContext *config = GetBNO085Context(ctx);
   if (config == nullptr || config->runtime == nullptr) {
     return false;
   }
@@ -218,20 +227,44 @@ bool BNO085SensorSample(const void *ctx, CANFDMessage &outFrame) {
     if (config->runtime->lastError == kBNO085SensorErrorNone) {
       config->runtime->lastError = kBNO085SensorErrorNotInitialized;
     }
-    CopyRuntimeToFrame(*config->runtime, outFrame);
+    CopyDataRuntimeToFrame(*config->runtime, outFrame);
     return true;
   }
 
   RefreshCachedSample(*config);
-  CopyRuntimeToFrame(*config->runtime, outFrame);
+  CopyDataRuntimeToFrame(*config->runtime, outFrame);
+  return true;
+}
+
+bool BNO085StatsSensorSample(const void *ctx, CANFDMessage &outFrame) {
+  const BNO085SubSensorContext *config = GetBNO085Context(ctx);
+  if (config == nullptr || config->runtime == nullptr) {
+    return false;
+  }
+
+  if (!config->runtime->initialized) {
+    if (config->runtime->lastError == kBNO085SensorErrorNone) {
+      config->runtime->lastError = kBNO085SensorErrorNotInitialized;
+    }
+    CopyStatsRuntimeToFrame(*config->runtime, outFrame);
+    return true;
+  }
+
+  RefreshCachedSample(*config);
+  CopyStatsRuntimeToFrame(*config->runtime, outFrame);
   return true;
 }
 
 void BNO085SensorSuspend(const void *ctx) {
-  const BNO085SensorContext *config = GetBNO085Context(ctx);
+  const BNO085SubSensorContext *config = GetBNO085Context(ctx);
   if (config == nullptr || config->runtime == nullptr ||
       !config->runtime->initialized) {
     return;
+  }
+
+  // Only suspend once, even if called for both Data and Stats
+  if (!config->runtime->dataReportsConfigured && !config->runtime->statsReportsConfigured) {
+    return; 
   }
 
   BNO08x *driver = GetDriver(*config);
@@ -244,15 +277,21 @@ void BNO085SensorSuspend(const void *ctx) {
     return;
   }
 
-  config->runtime->reportsConfigured = false;
+  config->runtime->dataReportsConfigured = false;
+  config->runtime->statsReportsConfigured = false;
   ResetCachedSample(*config->runtime);
 }
 
 void BNO085SensorResume(const void *ctx) {
-  const BNO085SensorContext *config = GetBNO085Context(ctx);
+  const BNO085SubSensorContext *config = GetBNO085Context(ctx);
   if (config == nullptr || config->runtime == nullptr ||
       !config->runtime->initialized) {
     return;
+  }
+
+  // Only resume once
+  if (config->runtime->dataReportsConfigured) {
+      return;
   }
 
   BNO08x *driver = GetDriver(*config);
@@ -269,7 +308,8 @@ void BNO085SensorResume(const void *ctx) {
     Wire.setClock(config->clockHz);
   }
 
-  config->runtime->reportsConfigured = false;
+  config->runtime->dataReportsConfigured = false;
+  config->runtime->statsReportsConfigured = false;
   ResetCachedSample(*config->runtime);
   (void)ConfigureReports(*config);
 }
