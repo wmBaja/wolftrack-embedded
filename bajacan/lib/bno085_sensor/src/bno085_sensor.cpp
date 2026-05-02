@@ -185,20 +185,27 @@ bool BNO085SensorBegin(const void *ctx) {
     Wire.setClock(config->clockHz);
   }
 
-  BNO08x *driver = GetDriver(*config);
-  if (driver == nullptr) {
-    config->runtime->lastError = kBNO085SensorErrorBeginFailed;
-    return false;
+  for (uint8_t attempt = 1U; attempt <= 5U; ++attempt) {
+    BNO08x *driver = GetDriver(*config);
+    if (driver == nullptr) {
+      config->runtime->lastError = kBNO085SensorErrorBeginFailed;
+      return false;
+    }
+
+    if (driver->begin(config->i2cAddress, Wire, config->interruptPin,
+                      config->resetPin)) {
+      config->runtime->initialized = true;
+      return ConfigureReports(*config);
+    }
+
+    // Delay and retry to allow Adafruit boards time to boot
+    if (attempt < 5U) {
+      delay(100);
+    }
   }
 
-  if (!driver->begin(config->i2cAddress, Wire, config->interruptPin,
-                     config->resetPin)) {
-    config->runtime->lastError = kBNO085SensorErrorBeginFailed;
-    return false;
-  }
-
-  config->runtime->initialized = true;
-  return ConfigureReports(*config);
+  config->runtime->lastError = kBNO085SensorErrorBeginFailed;
+  return false;
 }
 
 bool BNO085SensorSample(const void *ctx, CANFDMessage &outFrame) {
