@@ -33,39 +33,36 @@ struct __attribute__((packed)) BNO085Quaternion {
   float real;
 };
 
-struct __attribute__((packed)) BNO085SampleFrameWithoutRotation {
+struct __attribute__((packed)) BNO085DataSampleFrameWithoutRotation {
   uint8_t version;
   uint8_t validMask;
-  uint8_t accelerometerAccuracy;
-  uint8_t gyroAccuracy;
-  uint8_t linearAccelerationAccuracy;
-  uint8_t rotationVectorAccuracy;
-  int16_t error;
   BNO085Vector3 accelerometer;
   BNO085Vector3 angularVelocity;
   BNO085Vector3 linearAcceleration;
 };
 
-struct __attribute__((packed)) BNO085SampleFrameWithRotation {
+struct __attribute__((packed)) BNO085DataSampleFrameWithRotation {
   uint8_t version;
   uint8_t validMask;
-  uint8_t accelerometerAccuracy;
-  uint8_t gyroAccuracy;
-  uint8_t linearAccelerationAccuracy;
-  uint8_t rotationVectorAccuracy;
-  int16_t error;
   BNO085Vector3 accelerometer;
   BNO085Vector3 angularVelocity;
   BNO085Vector3 linearAcceleration;
   BNO085Quaternion rotationVector;
+};
+
+struct __attribute__((packed)) BNO085StatsSampleFrame {
+  uint8_t version;
+  uint8_t validMask;
+  int16_t error;
+  uint8_t accelerometerAccuracy;
+  uint8_t gyroAccuracy;
+  uint8_t linearAccelerationAccuracy;
+  uint8_t rotationVectorAccuracy;
   float rotationVectorAccuracyRad;
 };
 
-static_assert(sizeof(BNO085SampleFrameWithoutRotation) <= 64U,
-              "BNO085 sample frame without rotation must fit in one CAN FD payload");
-
-constexpr bool kBNO085SensorHasRotationVector =
-    sizeof(BNO085SampleFrameWithRotation) <= 64U;
+constexpr bool kBNO085DataSensorHasRotationVector =
+    sizeof(BNO085DataSampleFrameWithRotation) <= 64U;
 
 template <bool Condition, typename TrueType, typename FalseType>
 struct BNO085SelectType {
@@ -77,21 +74,26 @@ struct BNO085SelectType<false, TrueType, FalseType> {
   using type = FalseType;
 };
 
-using BNO085SampleFrame =
-    typename BNO085SelectType<kBNO085SensorHasRotationVector,
-                              BNO085SampleFrameWithRotation,
-                              BNO085SampleFrameWithoutRotation>::type;
+using BNO085DataSampleFrame =
+    typename BNO085SelectType<kBNO085DataSensorHasRotationVector,
+                              BNO085DataSampleFrameWithRotation,
+                              BNO085DataSampleFrameWithoutRotation>::type;
 
-static_assert(sizeof(BNO085SampleFrame) <= 64U,
-              "BNO085 sample frame must fit in one CAN FD payload");
+static_assert(sizeof(BNO085DataSampleFrame) <= 64U,
+              "BNO085 data sample frame must fit in one CAN FD payload");
+static_assert(sizeof(BNO085StatsSampleFrame) <= 64U,
+              "BNO085 stats sample frame must fit in one CAN FD payload");
 
-constexpr uint8_t kBNO085SensorPayloadSize =
-    static_cast<uint8_t>(sizeof(BNO085SampleFrame));
+constexpr uint8_t kBNO085DataSensorPayloadSize =
+    static_cast<uint8_t>(sizeof(BNO085DataSampleFrame));
+constexpr uint8_t kBNO085StatsSensorPayloadSize =
+    static_cast<uint8_t>(sizeof(BNO085StatsSampleFrame));
 
 struct BNO085SensorRuntime {
   BNO08x driver;
   bool initialized = false;
-  bool reportsConfigured = false;
+  bool dataReportsConfigured = false;
+  bool statsReportsConfigured = false;
   uint8_t validMask = 0U;
   uint8_t accelerometerAccuracy = 0U;
   uint8_t gyroAccuracy = 0U;
@@ -105,7 +107,7 @@ struct BNO085SensorRuntime {
   float rotationVectorAccuracyRad = 0.0f;
 };
 
-struct BNO085SensorContext {
+struct BNO085SubSensorContext {
   SensorContext base;
   BNO085SensorRuntime *runtime;
   uint8_t i2cAddress;
@@ -116,15 +118,26 @@ struct BNO085SensorContext {
 };
 
 bool BNO085SensorBegin(const void *ctx);
-bool BNO085SensorSample(const void *ctx, CANFDMessage &outFrame);
+bool BNO085DataSensorSample(const void *ctx, CANFDMessage &outFrame);
+bool BNO085StatsSensorSample(const void *ctx, CANFDMessage &outFrame);
 void BNO085SensorSuspend(const void *ctx);
 void BNO085SensorResume(const void *ctx);
 
-constexpr SensorDescriptor MakeBNO085Sensor(const BNO085SensorContext *ctx) {
+constexpr SensorDescriptor MakeBNO085DataSensor(const BNO085SubSensorContext *ctx) {
   return SensorDescriptor{
       .context = ctx,
       .begin = BNO085SensorBegin,
-      .sample = BNO085SensorSample,
+      .sample = BNO085DataSensorSample,
+      .suspend = BNO085SensorSuspend,
+      .resume = BNO085SensorResume,
+  };
+}
+
+constexpr SensorDescriptor MakeBNO085StatsSensor(const BNO085SubSensorContext *ctx) {
+  return SensorDescriptor{
+      .context = ctx,
+      .begin = BNO085SensorBegin,
+      .sample = BNO085StatsSensorSample,
       .suspend = BNO085SensorSuspend,
       .resume = BNO085SensorResume,
   };

@@ -21,18 +21,30 @@ inline AS5600SensorRuntime gSteeringAngleRuntime{&Wire1};
 inline BNO085SensorRuntime gImuRuntime{};
 
 
-// Sensor contexts
-constexpr BNO085SensorContext kIMU{
+constexpr BNO085SubSensorContext kIMUData{
     .base = {
-        .name = "IMU",
-        .payloadSize = kBNO085SensorPayloadSize,
+        .name = "IMU Data",
+        .payloadSize = kBNO085DataSensorPayloadSize,
     },
     .runtime = &gImuRuntime,
     .i2cAddress = 0x4A,
     .clockHz = 400000,
     .interruptPin = -1,
     .resetPin = -1,
-    .reportIntervalMs = kBNO085DefaultReportIntervalMs,
+    .reportIntervalMs = 2,
+};
+
+constexpr BNO085SubSensorContext kIMUStats{
+    .base = {
+        .name = "IMU Stats",
+        .payloadSize = kBNO085StatsSensorPayloadSize,
+    },
+    .runtime = &gImuRuntime,
+    .i2cAddress = 0x4A,
+    .clockHz = 400000,
+    .interruptPin = -1,
+    .resetPin = -1,
+    .reportIntervalMs = 2, // Underlying sensor runs at 2ms
 };
 
 constexpr AS5600SensorContext kSteeringPos{
@@ -81,8 +93,12 @@ constexpr AnalogSensorContext kFRSuspensionSensor{
 
 
 // Sensor Groups
-constexpr SensorDescriptor kIMUSensorGroup[] = {
-    MakeBNO085Sensor(&kIMU),
+constexpr SensorDescriptor kIMUDataGroup[] = {
+    MakeBNO085DataSensor(&kIMUData),
+};
+
+constexpr SensorDescriptor kIMUStatsGroup[] = {
+    MakeBNO085StatsSensor(&kIMUStats),
 };
 
 constexpr SensorDescriptor kFastGroupSensors[] = {
@@ -104,11 +120,18 @@ constexpr MessageGroupConfig kFrontGroups[] = {
         .sensorCount = sizeof(kFastGroupSensors) / sizeof(kFastGroupSensors[0]),
     },
     {
-        .name = "IMU",
+        .name = "IMU_Data",
         .canId = 0x201,
-        .pollIntervalMs = 50,
-        .sensors = kIMUSensorGroup,
-        .sensorCount = sizeof(kIMUSensorGroup) / sizeof(kIMUSensorGroup[0]),
+        .pollIntervalMs = 2,
+        .sensors = kIMUDataGroup,
+        .sensorCount = sizeof(kIMUDataGroup) / sizeof(kIMUDataGroup[0]),
+    },
+    {
+        .name = "IMU_Stats",
+        .canId = 0x202,
+        .pollIntervalMs = 100,
+        .sensors = kIMUStatsGroup,
+        .sensorCount = sizeof(kIMUStatsGroup) / sizeof(kIMUStatsGroup[0]),
     },
 };
 
