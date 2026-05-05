@@ -22,10 +22,20 @@ inline PwmRpmSensorRuntime gWheelSpeedRuntime{};
 
 // Grouped sensors table; add entries as real sensors are implemented.
 
-constexpr PwmRpmSensorContext kWheelSpeedSensor{
+constexpr PwmRpmSubSensorContext kWheelSpeedData{
     .base = {
-        .name = "Wheel Speed Sensor",
-        .payloadSize = kPwmRpmSensorPayloadSize,
+        .name = "Wheel Speed Data",
+        .payloadSize = kPwmRpmDataSensorPayloadSize,
+    },
+    .runtime = &gWheelSpeedRuntime,
+    .pin = PIN_PD4,
+    .timeoutMicros = 3000,
+};
+
+constexpr PwmRpmSubSensorContext kWheelSpeedStats{
+    .base = {
+        .name = "Wheel Speed Stats",
+        .payloadSize = kPwmRpmStatsSensorPayloadSize,
     },
     .runtime = &gWheelSpeedRuntime,
     .pin = PIN_PD4,
@@ -70,8 +80,12 @@ constexpr SensorDescriptor kIRSensorGroup[] = {
     MakeMLX90614Sensor(&kIRSensorCVT),
 };
 
+constexpr SensorDescriptor kPwmRpmStatsSensors[] = {
+    MakePwmRpmStatsSensor(&kWheelSpeedStats),
+};
+
 constexpr SensorDescriptor kFastGroupSensors[] = {
-    MakePwmRpmSensor(&kWheelSpeedSensor),
+    MakePwmRpmDataSensor(&kWheelSpeedData),
     MakeAnalogSensor(&kRLSuspensionSensor),
     MakeAnalogSensor(&kRRSuspensionSensor),
     MakeAnalogSensor(&kThrottlePosSensor),
@@ -91,6 +105,13 @@ constexpr MessageGroupConfig kRearGroups[] = {
         .pollIntervalMs = 50,
         .sensors = kIRSensorGroup,
         .sensorCount = sizeof(kIRSensorGroup) / sizeof(kIRSensorGroup[0]),
+    },
+    {
+        .name = "Wheel Speed Stats",
+        .canId = 0x102,
+        .pollIntervalMs = 250,
+        .sensors = kPwmRpmStatsSensors,
+        .sensorCount = sizeof(kPwmRpmStatsSensors) / sizeof(kPwmRpmStatsSensors[0]),
     },
 };
 

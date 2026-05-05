@@ -11,11 +11,11 @@ constexpr uint8_t kPwmRpmSampleValidRpm = 0x04U;
 
 constexpr uint16_t kPwmRpmDutyCycleScale = 10000U;
 constexpr uint16_t kPwmRpmCentiDegreesPerRevolution = 36000U;
-// Covers the slowest AS5600 PWM mode (115 Hz) with margin.
+
 constexpr uint32_t kPwmRpmDefaultTimeoutMicros = 10000UL;
 constexpr uint16_t kAS5600PwmFrameBits = 4351U;
 constexpr uint16_t kAS5600PwmHeaderBits = 128U;
-constexpr uint16_t kAS5600PwmAngleBits = 4095U;
+constexpr uint16_t kAS5600PwmAngleBits = kAS5600PwmFrameBits - (kAS5600PwmHeaderBits*2);
 constexpr uint16_t kPwmRpmAS5600CountsPerRevolution = 4096U;
 
 constexpr int16_t kPwmRpmSensorErrorNone = 0;
@@ -25,7 +25,14 @@ constexpr int16_t kPwmRpmSensorErrorInvalidPeriod = -3;
 constexpr int16_t kPwmRpmSensorErrorZeroDeltaTime = -4;
 constexpr int16_t kPwmRpmSensorErrorNotInitialized = -5;
 
-struct __attribute__((packed)) PwmRpmSampleFrame {
+struct __attribute__((packed)) PwmRpmDataSampleFrame {
+  uint8_t version;
+  uint8_t validMask;
+  int16_t error;
+  int32_t milliRpm;
+};
+
+struct __attribute__((packed)) PwmRpmStatsSampleFrame {
   uint8_t version;
   uint8_t validMask;
   uint16_t dutyCycleBasisPoints;
@@ -37,11 +44,15 @@ struct __attribute__((packed)) PwmRpmSampleFrame {
   int16_t error;
 };
 
-static_assert(sizeof(PwmRpmSampleFrame) <= 64U,
-              "PWM RPM sample frame must fit in one CAN FD payload");
+static_assert(sizeof(PwmRpmDataSampleFrame) <= 64U,
+              "PWM RPM data frame must fit in one CAN FD payload");
+static_assert(sizeof(PwmRpmStatsSampleFrame) <= 64U,
+              "PWM RPM stats frame must fit in one CAN FD payload");
 
-constexpr uint8_t kPwmRpmSensorPayloadSize =
-    static_cast<uint8_t>(sizeof(PwmRpmSampleFrame));
+constexpr uint8_t kPwmRpmDataSensorPayloadSize =
+    static_cast<uint8_t>(sizeof(PwmRpmDataSampleFrame));
+constexpr uint8_t kPwmRpmStatsSensorPayloadSize =
+    static_cast<uint8_t>(sizeof(PwmRpmStatsSampleFrame));
 
 struct PwmRpmSensorRuntime {
   bool initialized = false;
@@ -54,9 +65,19 @@ struct PwmRpmSensorRuntime {
   volatile uint32_t isrPeriodMicros = 0U;
   volatile uint32_t isrSampleAtMicros = 0U;
   volatile bool isrHasData = false;
+
+  // Cached state for multiple sub-sensors to read
+  int16_t lastError = kPwmRpmSensorErrorNone;
+  uint8_t validMask = 0U;
+  int32_t lastMilliRpm = 0;
+  uint16_t dutyCycleBasisPoints = 0U;
+  uint16_t rawAngle = 0U;
+  uint16_t angleCentiDegrees = 0U;
+  uint32_t pwmPeriodMicros = 0U;
+  uint32_t sampleIntervalMicros = 0U;
 };
 
-struct PwmRpmSensorContext {
+struct PwmRpmSubSensorContext {
   SensorContext base;
   PwmRpmSensorRuntime *runtime;
   uint8_t pin;
@@ -65,14 +86,26 @@ struct PwmRpmSensorContext {
 };
 
 bool PwmRpmSensorBegin(const void *ctx);
-bool PwmRpmSensorSample(const void *ctx, CANFDMessage &outFrame);
+bool PwmRpmDataSensorSample(const void *ctx, CANFDMessage &outFrame);
+bool PwmRpmStatsSensorSample(const void *ctx, CANFDMessage &outFrame);
 
-constexpr SensorDescriptor MakePwmRpmSensor(
-    const PwmRpmSensorContext *ctx) {
+constexpr SensorDescriptor MakePwmRpmDataSensor(
+    const PwmRpmSubSensorContext *ctx) {
   return SensorDescriptor{
       .context = ctx,
       .begin = PwmRpmSensorBegin,
-      .sample = PwmRpmSensorSample,
+      .sample = PwmRpmDataSensorSample,
+      .suspend = nullptr,
+      .resume = nullptr,
+  };
+}
+
+constexpr SensorDescriptor MakePwmRpmStatsSensor(
+    const PwmRpmSubSensorContext *ctx) {
+  return SensorDescriptor{
+      .context = ctx,
+      .begin = PwmRpmSensorBegin,
+      .sample = PwmRpmStatsSensorSample,
       .suspend = nullptr,
       .resume = nullptr,
   };

@@ -1,0 +1,17 @@
+CompileFlags:
+  # PlatformIO generates this via: pio run -t compiledb -e board_example
+  CompilationDatabase: .pio/build/board_example
+
+  # Strip flags clangd doesn't understand (AVR-specific gcc flags)
+  Remove:
+    - -mmcu=*
+    - -mrelax
+    - -mshort-calls
+    - -mcall-prologues
+    - -fno-fat-lto-objects
+
+Diagnostics:
+  # Suppress warnings about unknown compiler flags
+  Suppress:
+    - drv_unknown_argument
+    - unknown_warning_option

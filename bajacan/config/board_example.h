@@ -72,10 +72,10 @@ constexpr BNO085SensorContext kExampleIMU{
 //     .pin = A1,
 // };
 
-// constexpr PwmRpmSensorContext kExamplePwmAngleSensor{
+// constexpr PwmRpmSubSensorContext kExamplePwmRpmDataSensor{
 //     .base = {
-//         .name = "AS5600 PWM",
-//         .payloadSize = kPwmRpmSensorPayloadSize,
+//         .name = "AS5600 PWM Data",
+//         .payloadSize = kPwmRpmDataSensorPayloadSize,
 //     },
 //     .runtime = &gExamplePwmAngleRuntime,
 //     .pin = 2,
@@ -84,7 +84,7 @@ constexpr BNO085SensorContext kExampleIMU{
 
 // constexpr SensorDescriptor kFastGroupSensors[] = {
 //     MakeAS5600Sensor(&kExampleEncoder),
-//     // MakePwmRpmSensor(&kExamplePwmAngleSensor),
+//     // MakePwmRpmDataSensor(&kExamplePwmRpmDataSensor),
 //     // MakeAnalogSensor(&kFrontBrakePressureSensor),
 // };
 

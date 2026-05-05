@@ -39,21 +39,15 @@ void (*const gPwmRpmIsrStubs[kMaxPwmSensors])() = {
   PwmRpmIsr0, PwmRpmIsr1, PwmRpmIsr2, PwmRpmIsr3
 };
 
-const PwmRpmSensorContext *GetPwmRpmContext(const void *ctx) {
-  return static_cast<const PwmRpmSensorContext *>(ctx);
+const PwmRpmSubSensorContext *GetPwmRpmContext(const void *ctx) {
+  return static_cast<const PwmRpmSubSensorContext *>(ctx);
 }
 
-uint32_t GetTimeoutMicros(const PwmRpmSensorContext &config) {
+uint32_t GetTimeoutMicros(const PwmRpmSubSensorContext &config) {
   if (config.timeoutMicros == 0U) {
     return kPwmRpmDefaultTimeoutMicros;
   }
   return config.timeoutMicros;
-}
-
-void CopySampleToFrame(const PwmRpmSampleFrame &sample,
-                       CANFDMessage &outFrame) {
-  outFrame.len = sizeof(sample);
-  memcpy(outFrame.data, &sample, sizeof(sample));
 }
 
 uint16_t PulseWidthToDutyCycleBasisPoints(const uint32_t highPulseMicros,
@@ -94,9 +88,9 @@ uint16_t HighPulseToRawAngle(const uint32_t highPulseMicros,
 }
 
 uint16_t RawAngleToCentiDegrees(const uint16_t rawAngle) {
-  const float degrees = static_cast<float>(rawAngle) * AS5600_RAW_TO_DEGREES;
-  const float centiDegrees = degrees * 100.0f;
-  return static_cast<uint16_t>(centiDegrees + 0.5f);
+  return static_cast<uint16_t>(
+      (static_cast<uint32_t>(rawAngle) * kPwmRpmCentiDegreesPerRevolution) /
+      kPwmRpmAS5600CountsPerRevolution);
 }
 
 int32_t ComputeWrappedRawDelta(const uint16_t currentRawAngle,
@@ -128,12 +122,79 @@ int32_t ComputeMilliRpmFromDelta(const int32_t deltaRawAngle,
                                                 : milliRpm - 0.5f);
 }
 
+void UpdateRuntimeData(const PwmRpmSubSensorContext &config) {
+  PwmRpmSensorRuntime *runtime = config.runtime;
+
+  noInterrupts();
+  bool hasData = runtime->isrHasData;
+  uint32_t highPulseMicros = runtime->isrHighPulseMicros;
+  uint32_t periodMicros = runtime->isrPeriodMicros;
+  uint32_t sampleAtMicros = runtime->isrSampleAtMicros;
+  runtime->isrHasData = false;
+  interrupts();
+
+  if (!hasData) {
+    uint32_t now = micros();
+    if (now - sampleAtMicros > GetTimeoutMicros(config)) {
+      runtime->lastError = kPwmRpmSensorErrorTimeoutWaitingForEdge;
+      runtime->validMask = 0;
+    } else {
+      runtime->lastError = kPwmRpmSensorErrorZeroDeltaTime;
+    }
+    return;
+  }
+
+  if (periodMicros == 0U) {
+    runtime->lastError = kPwmRpmSensorErrorInvalidPeriod;
+    runtime->validMask = 0;
+    return;
+  }
+
+  runtime->lastError = kPwmRpmSensorErrorNone;
+  runtime->pwmPeriodMicros = periodMicros;
+  runtime->dutyCycleBasisPoints =
+      PulseWidthToDutyCycleBasisPoints(highPulseMicros, periodMicros);
+  runtime->rawAngle = HighPulseToRawAngle(highPulseMicros, periodMicros);
+  runtime->angleCentiDegrees = RawAngleToCentiDegrees(runtime->rawAngle);
+
+  if (!runtime->hasPreviousSample) {
+    runtime->hasPreviousSample = true;
+    runtime->previousRawAngle = runtime->rawAngle;
+    runtime->previousSampleAtMicros = sampleAtMicros;
+    runtime->validMask = kPwmRpmSampleValidDutyCycle | kPwmRpmSampleValidAngle;
+    return;
+  }
+
+  runtime->sampleIntervalMicros =
+      static_cast<uint32_t>(sampleAtMicros - runtime->previousSampleAtMicros);
+      
+  if (runtime->sampleIntervalMicros == 0U) {
+    runtime->lastError = kPwmRpmSensorErrorZeroDeltaTime;
+    return;
+  }
+
+  const int32_t deltaRawAngle = ComputeWrappedRawDelta(
+      runtime->rawAngle, runtime->previousRawAngle);
+  runtime->lastMilliRpm = ComputeMilliRpmFromDelta(deltaRawAngle,
+                                             runtime->sampleIntervalMicros);
+                                             
+  runtime->validMask = kPwmRpmSampleValidDutyCycle | kPwmRpmSampleValidAngle | kPwmRpmSampleValidRpm;
+
+  runtime->previousRawAngle = runtime->rawAngle;
+  runtime->previousSampleAtMicros = sampleAtMicros;
+}
+
 }  // namespace
 
 bool PwmRpmSensorBegin(const void *ctx) {
-  const PwmRpmSensorContext *config = GetPwmRpmContext(ctx);
+  const PwmRpmSubSensorContext *config = GetPwmRpmContext(ctx);
   if (config == nullptr || config->runtime == nullptr) {
     return false;
+  }
+
+  // Only initialize hardware once per runtime
+  if (config->runtime->initialized) {
+    return true;
   }
 
   pinMode(config->pin, INPUT);
@@ -169,83 +230,55 @@ bool PwmRpmSensorBegin(const void *ctx) {
   return true;
 }
 
-bool PwmRpmSensorSample(const void *ctx, CANFDMessage &outFrame) {
-  const PwmRpmSensorContext *config = GetPwmRpmContext(ctx);
-  if (config == nullptr || config->runtime == nullptr) {
-    return false;
-  }
-
-  PwmRpmSampleFrame sample = {};
-  sample.version = kPwmRpmSampleFrameVersion;
-
-  if (!config->runtime->initialized) {
+bool PwmRpmDataSensorSample(const void *ctx, CANFDMessage &outFrame) {
+  const PwmRpmSubSensorContext *config = GetPwmRpmContext(ctx);
+  if (config == nullptr || config->runtime == nullptr || !config->runtime->initialized) {
+    PwmRpmDataSampleFrame sample = {};
+    sample.version = kPwmRpmSampleFrameVersion;
     sample.error = kPwmRpmSensorErrorNotInitialized;
-    CopySampleToFrame(sample, outFrame);
+    outFrame.len = sizeof(sample);
+    memcpy(outFrame.data, &sample, sizeof(sample));
     return true;
   }
 
-  // Safely read volatile variables
-  noInterrupts();
-  bool hasData = config->runtime->isrHasData;
-  uint32_t highPulseMicros = config->runtime->isrHighPulseMicros;
-  uint32_t periodMicros = config->runtime->isrPeriodMicros;
-  uint32_t sampleAtMicros = config->runtime->isrSampleAtMicros;
-  config->runtime->isrHasData = false; // Reset flag after reading
-  interrupts();
+  UpdateRuntimeData(*config);
 
-  if (!hasData) {
-    // Check for timeout
-    uint32_t now = micros();
-    if (now - sampleAtMicros > GetTimeoutMicros(*config)) {
-      sample.error = kPwmRpmSensorErrorTimeoutWaitingForEdge;
-    } else {
-      sample.error = kPwmRpmSensorErrorZeroDeltaTime;
-    }
-    CopySampleToFrame(sample, outFrame);
+  PwmRpmDataSampleFrame sample = {};
+  sample.version = kPwmRpmSampleFrameVersion;
+  sample.validMask = config->runtime->validMask;
+  sample.error = config->runtime->lastError;
+  sample.milliRpm = config->runtime->lastMilliRpm;
+
+  outFrame.len = sizeof(sample);
+  memcpy(outFrame.data, &sample, sizeof(sample));
+  return true;
+}
+
+bool PwmRpmStatsSensorSample(const void *ctx, CANFDMessage &outFrame) {
+  const PwmRpmSubSensorContext *config = GetPwmRpmContext(ctx);
+  if (config == nullptr || config->runtime == nullptr || !config->runtime->initialized) {
+    PwmRpmStatsSampleFrame sample = {};
+    sample.version = kPwmRpmSampleFrameVersion;
+    sample.error = kPwmRpmSensorErrorNotInitialized;
+    outFrame.len = sizeof(sample);
+    memcpy(outFrame.data, &sample, sizeof(sample));
     return true;
   }
 
-  if (periodMicros == 0U) {
-    sample.error = kPwmRpmSensorErrorInvalidPeriod;
-    CopySampleToFrame(sample, outFrame);
-    return true;
-  }
+  UpdateRuntimeData(*config);
 
-  sample.error = kPwmRpmSensorErrorNone;
-  sample.pwmPeriodMicros = periodMicros;
-  sample.dutyCycleBasisPoints =
-      PulseWidthToDutyCycleBasisPoints(highPulseMicros, periodMicros);
-  sample.rawAngle = HighPulseToRawAngle(highPulseMicros, periodMicros);
-  sample.angleCentiDegrees = RawAngleToCentiDegrees(sample.rawAngle);
+  PwmRpmStatsSampleFrame sample = {};
+  sample.version = kPwmRpmSampleFrameVersion;
+  sample.validMask = config->runtime->validMask;
+  sample.dutyCycleBasisPoints = config->runtime->dutyCycleBasisPoints;
+  sample.rawAngle = config->runtime->rawAngle;
+  sample.angleCentiDegrees = config->runtime->angleCentiDegrees;
+  sample.pwmPeriodMicros = config->runtime->pwmPeriodMicros;
+  sample.sampleIntervalMicros = config->runtime->sampleIntervalMicros;
+  sample.milliRpm = config->runtime->lastMilliRpm;
+  sample.error = config->runtime->lastError;
 
-  if (!config->runtime->hasPreviousSample) {
-    config->runtime->hasPreviousSample = true;
-    config->runtime->previousRawAngle = sample.rawAngle;
-    config->runtime->previousSampleAtMicros = sampleAtMicros;
-    CopySampleToFrame(sample, outFrame);
-    return true;
-  }
-
-  sample.validMask =
-      kPwmRpmSampleValidDutyCycle | kPwmRpmSampleValidAngle;
-  sample.sampleIntervalMicros =
-      static_cast<uint32_t>(sampleAtMicros - config->runtime->previousSampleAtMicros);
-      
-  if (sample.sampleIntervalMicros == 0U) {
-    sample.error = kPwmRpmSensorErrorZeroDeltaTime;
-    CopySampleToFrame(sample, outFrame);
-    return true;
-  }
-
-  const int32_t deltaRawAngle = ComputeWrappedRawDelta(
-      sample.rawAngle, config->runtime->previousRawAngle);
-  sample.milliRpm = ComputeMilliRpmFromDelta(deltaRawAngle,
-                                             sample.sampleIntervalMicros);
-  sample.validMask |= kPwmRpmSampleValidRpm;
-
-  config->runtime->previousRawAngle = sample.rawAngle;
-  config->runtime->previousSampleAtMicros = sampleAtMicros;
-
-  CopySampleToFrame(sample, outFrame);
+  outFrame.len = sizeof(sample);
+  memcpy(outFrame.data, &sample, sizeof(sample));
   return true;
 }
