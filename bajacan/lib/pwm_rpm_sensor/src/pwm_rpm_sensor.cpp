@@ -1,23 +1,56 @@
 #include <Arduino.h>
 #include <AS5600.h>
-#include <pwm_angle_sensor.h>
+#include <pwm_rpm_sensor.h>
 
 #include <string.h>
 
 namespace {
 
-const PWMAngleSensorContext *GetPWMAngleContext(const void *ctx) {
-  return static_cast<const PWMAngleSensorContext *>(ctx);
+// Up to 4 PWM sensors supported for interrupts
+constexpr size_t kMaxPwmSensors = 4;
+PwmRpmSensorRuntime* gPwmRpmRuntimes[kMaxPwmSensors] = {nullptr};
+uint8_t gPwmRpmPins[kMaxPwmSensors] = {0};
+
+void PwmRpmIsr(size_t index) {
+  PwmRpmSensorRuntime* runtime = gPwmRpmRuntimes[index];
+  if (!runtime) return;
+
+  uint32_t now = micros();
+  bool isHigh = digitalRead(gPwmRpmPins[index]);
+
+  if (isHigh) {
+    if (runtime->isrLastRiseMicros != 0) {
+        runtime->isrPeriodMicros = now - runtime->isrLastRiseMicros;
+        runtime->isrHasData = true;
+    }
+    runtime->isrLastRiseMicros = now;
+  } else {
+    runtime->isrHighPulseMicros = now - runtime->isrLastRiseMicros;
+    runtime->isrSampleAtMicros = now; // Sampled at falling edge
+  }
 }
 
-uint32_t GetTimeoutMicros(const PWMAngleSensorContext &config) {
+void PwmRpmIsr0() { PwmRpmIsr(0); }
+void PwmRpmIsr1() { PwmRpmIsr(1); }
+void PwmRpmIsr2() { PwmRpmIsr(2); }
+void PwmRpmIsr3() { PwmRpmIsr(3); }
+
+void (*const gPwmRpmIsrStubs[kMaxPwmSensors])() = {
+  PwmRpmIsr0, PwmRpmIsr1, PwmRpmIsr2, PwmRpmIsr3
+};
+
+const PwmRpmSensorContext *GetPwmRpmContext(const void *ctx) {
+  return static_cast<const PwmRpmSensorContext *>(ctx);
+}
+
+uint32_t GetTimeoutMicros(const PwmRpmSensorContext &config) {
   if (config.timeoutMicros == 0U) {
-    return kPWMAngleDefaultTimeoutMicros;
+    return kPwmRpmDefaultTimeoutMicros;
   }
   return config.timeoutMicros;
 }
 
-void CopySampleToFrame(const PWMAngleSampleFrame &sample,
+void CopySampleToFrame(const PwmRpmSampleFrame &sample,
                        CANFDMessage &outFrame) {
   outFrame.len = sizeof(sample);
   memcpy(outFrame.data, &sample, sizeof(sample));
@@ -30,11 +63,11 @@ uint16_t PulseWidthToDutyCycleBasisPoints(const uint32_t highPulseMicros,
   }
 
   const uint64_t scaledHigh =
-      static_cast<uint64_t>(highPulseMicros) * kPWMAngleDutyCycleScale;
+      static_cast<uint64_t>(highPulseMicros) * kPwmRpmDutyCycleScale;
   const uint32_t rounded =
       static_cast<uint32_t>((scaledHigh + (periodMicros / 2U)) / periodMicros);
-  if (rounded >= kPWMAngleDutyCycleScale) {
-    return kPWMAngleDutyCycleScale;
+  if (rounded >= kPwmRpmDutyCycleScale) {
+    return kPwmRpmDutyCycleScale;
   }
   return static_cast<uint16_t>(rounded);
 }
@@ -69,14 +102,14 @@ uint16_t RawAngleToCentiDegrees(const uint16_t rawAngle) {
 int32_t ComputeWrappedRawDelta(const uint16_t currentRawAngle,
                                const uint16_t previousRawAngle) {
   constexpr int32_t kHalfRevolutionCounts =
-      kPWMAngleAS5600CountsPerRevolution / 2;
+      kPwmRpmAS5600CountsPerRevolution / 2;
 
   int32_t delta =
       static_cast<int32_t>(currentRawAngle) - static_cast<int32_t>(previousRawAngle);
   if (delta > kHalfRevolutionCounts) {
-    delta -= kPWMAngleAS5600CountsPerRevolution;
+    delta -= kPwmRpmAS5600CountsPerRevolution;
   } else if (delta < -kHalfRevolutionCounts) {
-    delta += kPWMAngleAS5600CountsPerRevolution;
+    delta += kPwmRpmAS5600CountsPerRevolution;
   }
   return delta;
 }
@@ -95,93 +128,90 @@ int32_t ComputeMilliRpmFromDelta(const int32_t deltaRawAngle,
                                                 : milliRpm - 0.5f);
 }
 
-bool WaitForLevel(const uint8_t pin, const int expectedLevel,
-                  const uint32_t timeoutMicros) {
-  const uint32_t startMicros = micros();
-  while (digitalRead(pin) != expectedLevel) {
-    if (static_cast<uint32_t>(micros() - startMicros) >= timeoutMicros) {
-      return false;
-    }
-  }
-  return true;
-}
-
-int16_t MeasureAs5600PwmFrame(const PWMAngleSensorContext &config,
-                              uint32_t &outHighPulseMicros,
-                              uint32_t &outPeriodMicros,
-                              uint32_t &outSampleAtMicros) {
-  const uint32_t timeoutMicros = GetTimeoutMicros(config);
-  if (digitalRead(config.pin) == HIGH &&
-      !WaitForLevel(config.pin, LOW, timeoutMicros)) {
-    return kPWMAngleSensorErrorTimeoutWaitingForEdge;
-  }
-
-  if (!WaitForLevel(config.pin, HIGH, timeoutMicros)) {
-    return kPWMAngleSensorErrorTimeoutWaitingForEdge;
-  }
-  const uint32_t riseMicros = micros();
-
-  if (!WaitForLevel(config.pin, LOW, timeoutMicros)) {
-    return kPWMAngleSensorErrorTimeoutMeasuringPulse;
-  }
-  const uint32_t fallMicros = micros();
-
-  if (!WaitForLevel(config.pin, HIGH, timeoutMicros)) {
-    return kPWMAngleSensorErrorTimeoutWaitingForEdge;
-  }
-  const uint32_t nextRiseMicros = micros();
-
-  outHighPulseMicros = static_cast<uint32_t>(fallMicros - riseMicros);
-  outPeriodMicros = static_cast<uint32_t>(nextRiseMicros - riseMicros);
-  outSampleAtMicros = nextRiseMicros;
-  if (outPeriodMicros == 0U) {
-    return kPWMAngleSensorErrorInvalidPeriod;
-  }
-
-  return kPWMAngleSensorErrorNone;
-}
-
 }  // namespace
 
-bool PWMAngleSensorBegin(const void *ctx) {
-  const PWMAngleSensorContext *config = GetPWMAngleContext(ctx);
+bool PwmRpmSensorBegin(const void *ctx) {
+  const PwmRpmSensorContext *config = GetPwmRpmContext(ctx);
   if (config == nullptr || config->runtime == nullptr) {
     return false;
   }
 
   pinMode(config->pin, INPUT);
+
+  // Find a free slot for the ISR
+  int slot = -1;
+  for (size_t i = 0; i < kMaxPwmSensors; ++i) {
+    if (gPwmRpmRuntimes[i] == nullptr || gPwmRpmRuntimes[i] == config->runtime) {
+      slot = i;
+      break;
+    }
+  }
+
+  if (slot >= 0) {
+    gPwmRpmRuntimes[slot] = config->runtime;
+    gPwmRpmPins[slot] = config->pin;
+    attachInterrupt(digitalPinToInterrupt(config->pin), gPwmRpmIsrStubs[slot], CHANGE);
+  } else {
+    return false; // No more ISR slots available
+  }
+
   config->runtime->initialized = true;
   config->runtime->hasPreviousSample = false;
   config->runtime->previousRawAngle = 0U;
   config->runtime->previousSampleAtMicros = 0U;
+  
+  config->runtime->isrLastRiseMicros = 0U;
+  config->runtime->isrHighPulseMicros = 0U;
+  config->runtime->isrPeriodMicros = 0U;
+  config->runtime->isrSampleAtMicros = 0U;
+  config->runtime->isrHasData = false;
+  
   return true;
 }
 
-bool PWMAngleSensorSample(const void *ctx, CANFDMessage &outFrame) {
-  const PWMAngleSensorContext *config = GetPWMAngleContext(ctx);
+bool PwmRpmSensorSample(const void *ctx, CANFDMessage &outFrame) {
+  const PwmRpmSensorContext *config = GetPwmRpmContext(ctx);
   if (config == nullptr || config->runtime == nullptr) {
     return false;
   }
 
-  PWMAngleSampleFrame sample = {};
-  sample.version = kPWMAngleSampleFrameVersion;
+  PwmRpmSampleFrame sample = {};
+  sample.version = kPwmRpmSampleFrameVersion;
 
   if (!config->runtime->initialized) {
-    sample.error = kPWMAngleSensorErrorNotInitialized;
+    sample.error = kPwmRpmSensorErrorNotInitialized;
     CopySampleToFrame(sample, outFrame);
     return true;
   }
 
-  uint32_t highPulseMicros = 0U;
-  uint32_t periodMicros = 0U;
-  uint32_t sampleAtMicros = 0U;
-  sample.error = MeasureAs5600PwmFrame(*config, highPulseMicros, periodMicros,
-                                       sampleAtMicros);
-  if (sample.error != kPWMAngleSensorErrorNone) {
+  // Safely read volatile variables
+  noInterrupts();
+  bool hasData = config->runtime->isrHasData;
+  uint32_t highPulseMicros = config->runtime->isrHighPulseMicros;
+  uint32_t periodMicros = config->runtime->isrPeriodMicros;
+  uint32_t sampleAtMicros = config->runtime->isrSampleAtMicros;
+  config->runtime->isrHasData = false; // Reset flag after reading
+  interrupts();
+
+  if (!hasData) {
+    // Check for timeout
+    uint32_t now = micros();
+    if (now - sampleAtMicros > GetTimeoutMicros(*config)) {
+      sample.error = kPwmRpmSensorErrorTimeoutWaitingForEdge;
+    } else {
+      sample.error = kPwmRpmSensorErrorZeroDeltaTime;
+    }
     CopySampleToFrame(sample, outFrame);
     return true;
   }
 
+  if (periodMicros == 0U) {
+    sample.error = kPwmRpmSensorErrorInvalidPeriod;
+    CopySampleToFrame(sample, outFrame);
+    return true;
+  }
+
+  sample.error = kPwmRpmSensorErrorNone;
   sample.pwmPeriodMicros = periodMicros;
   sample.dutyCycleBasisPoints =
       PulseWidthToDutyCycleBasisPoints(highPulseMicros, periodMicros);
@@ -197,11 +227,12 @@ bool PWMAngleSensorSample(const void *ctx, CANFDMessage &outFrame) {
   }
 
   sample.validMask =
-      kPWMAngleSampleValidDutyCycle | kPWMAngleSampleValidAngle;
+      kPwmRpmSampleValidDutyCycle | kPwmRpmSampleValidAngle;
   sample.sampleIntervalMicros =
       static_cast<uint32_t>(sampleAtMicros - config->runtime->previousSampleAtMicros);
+      
   if (sample.sampleIntervalMicros == 0U) {
-    sample.error = kPWMAngleSensorErrorZeroDeltaTime;
+    sample.error = kPwmRpmSensorErrorZeroDeltaTime;
     CopySampleToFrame(sample, outFrame);
     return true;
   }
@@ -210,7 +241,7 @@ bool PWMAngleSensorSample(const void *ctx, CANFDMessage &outFrame) {
       sample.rawAngle, config->runtime->previousRawAngle);
   sample.milliRpm = ComputeMilliRpmFromDelta(deltaRawAngle,
                                              sample.sampleIntervalMicros);
-  sample.validMask |= kPWMAngleSampleValidRpm;
+  sample.validMask |= kPwmRpmSampleValidRpm;
 
   config->runtime->previousRawAngle = sample.rawAngle;
   config->runtime->previousSampleAtMicros = sampleAtMicros;

@@ -1,7 +1,7 @@
 {
-  "name": "pwm_angle_sensor",
+  "name": "pwm_rpm_sensor",
   "version": "0.1.0",
-  "description": "PWM angle and RPM sensor wrapper for Baja CAN",
+  "description": "PWM RPM sensor wrapper for Baja CAN",
   "dependencies": [
     {
       "name": "ACAN2517FD",

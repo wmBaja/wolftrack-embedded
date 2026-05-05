@@ -5,7 +5,7 @@
 #include <bno085_sensor.h>
 #include <config.h>
 #include <mlx90614_sensor.h>
-#include <pwm_angle_sensor.h>
+#include <pwm_rpm_sensor.h>
 #include <Wire.h>
 
 // Example hooks; set to nullptr when unused.
@@ -18,14 +18,14 @@ constexpr BoardHooks kExampleHooks{
 // Runtime objects for sensors
 
 inline MLX90614SensorRuntime gIRRuntime{&Wire1};
-inline PWMAngleSensorRuntime gWheelSpeedRuntime{};
+inline PwmRpmSensorRuntime gWheelSpeedRuntime{};
 
 // Grouped sensors table; add entries as real sensors are implemented.
 
-constexpr PWMAngleSensorContext kWheelSpeedSensor{
+constexpr PwmRpmSensorContext kWheelSpeedSensor{
     .base = {
         .name = "Wheel Speed Sensor",
-        .payloadSize = kPWMAngleSensorPayloadSize,
+        .payloadSize = kPwmRpmSensorPayloadSize,
     },
     .runtime = &gWheelSpeedRuntime,
     .pin = PIN_PD4,
@@ -71,7 +71,7 @@ constexpr SensorDescriptor kIRSensorGroup[] = {
 };
 
 constexpr SensorDescriptor kFastGroupSensors[] = {
-    MakePWMAngleSensor(&kWheelSpeedSensor),
+    MakePwmRpmSensor(&kWheelSpeedSensor),
     MakeAnalogSensor(&kRLSuspensionSensor),
     MakeAnalogSensor(&kRRSuspensionSensor),
     MakeAnalogSensor(&kThrottlePosSensor),

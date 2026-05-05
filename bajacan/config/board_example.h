@@ -5,7 +5,7 @@
 #include <bno085_sensor.h>
 #include <config.h>
 #include <mlx90614_sensor.h>
-#include <pwm_angle_sensor.h>
+#include <pwm_rpm_sensor.h>
 
 // Example hooks; set to nullptr when unused.
 constexpr BoardHooks kExampleHooks{
@@ -17,7 +17,7 @@ constexpr BoardHooks kExampleHooks{
 inline AS5600SensorRuntime gExampleEncoderRuntime{};
 inline BNO085SensorRuntime gExampleImuRuntime{};
 inline MLX90614SensorRuntime gExampleIrSensorRuntime{};
-inline PWMAngleSensorRuntime gExamplePwmAngleRuntime{};
+inline PwmRpmSensorRuntime gExamplePwmAngleRuntime{};
 
 // Example grouped sensors table; add entries as real sensors are implemented.
 
@@ -72,19 +72,19 @@ constexpr BNO085SensorContext kExampleIMU{
 //     .pin = A1,
 // };
 
-// constexpr PWMAngleSensorContext kExamplePwmAngleSensor{
+// constexpr PwmRpmSensorContext kExamplePwmAngleSensor{
 //     .base = {
 //         .name = "AS5600 PWM",
-//         .payloadSize = kPWMAngleSensorPayloadSize,
+//         .payloadSize = kPwmRpmSensorPayloadSize,
 //     },
 //     .runtime = &gExamplePwmAngleRuntime,
 //     .pin = 2,
-//     .timeoutMicros = kPWMAngleDefaultTimeoutMicros,
+//     .timeoutMicros = kPwmRpmDefaultTimeoutMicros,
 // };
 
 // constexpr SensorDescriptor kFastGroupSensors[] = {
 //     MakeAS5600Sensor(&kExampleEncoder),
-//     // MakePWMAngleSensor(&kExamplePwmAngleSensor),
+//     // MakePwmRpmSensor(&kExamplePwmAngleSensor),
 //     // MakeAnalogSensor(&kFrontBrakePressureSensor),
 // };
 
