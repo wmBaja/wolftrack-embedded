@@ -1,11 +1,11 @@
 #pragma once
 
 #include <analog_sensor.h>
+#include <analog_rpm_sensor.h>
 #include <as5600_sensor.h>
 #include <bno085_sensor.h>
 #include <config.h>
 #include <mlx90614_sensor.h>
-#include <pwm_rpm_sensor.h>
 #include <Wire.h>
 
 // Example hooks; set to nullptr when unused.
@@ -18,28 +18,26 @@ constexpr BoardHooks kExampleHooks{
 // Runtime objects for sensors
 
 inline MLX90614SensorRuntime gIRRuntime{&Wire1};
-inline PwmRpmSensorRuntime gWheelSpeedRuntime{};
+inline AnalogRpmSensorRuntime gWheelSpeedRuntime{};
 
 // Grouped sensors table; add entries as real sensors are implemented.
 
-constexpr PwmRpmSubSensorContext kWheelSpeedData{
+constexpr AnalogRpmSubSensorContext kWheelSpeedData{
     .base = {
         .name = "Wheel Speed Data",
-        .payloadSize = kPwmRpmDataSensorPayloadSize,
+        .payloadSize = kAnalogRpmDataSensorPayloadSize,
     },
     .runtime = &gWheelSpeedRuntime,
     .pin = PIN_PD4,
-    .timeoutMicros = 3000,
 };
 
-constexpr PwmRpmSubSensorContext kWheelSpeedStats{
+constexpr AnalogRpmSubSensorContext kWheelSpeedStats{
     .base = {
         .name = "Wheel Speed Stats",
-        .payloadSize = kPwmRpmStatsSensorPayloadSize,
+        .payloadSize = kAnalogRpmStatsSensorPayloadSize,
     },
     .runtime = &gWheelSpeedRuntime,
     .pin = PIN_PD4,
-    .timeoutMicros = 3000,
 };
 
 constexpr MLX90614SensorContext kIRSensorCVT{
@@ -80,12 +78,16 @@ constexpr SensorDescriptor kIRSensorGroup[] = {
     MakeMLX90614Sensor(&kIRSensorCVT),
 };
 
-constexpr SensorDescriptor kPwmRpmStatsSensors[] = {
-    MakePwmRpmStatsSensor(&kWheelSpeedStats),
+constexpr SensorDescriptor kAnalogRpmStatsSensors[] = {
+    MakeAnalogRpmStatsSensor(&kWheelSpeedStats),
+};
+
+constexpr SensorDescriptor kAnalogRPMDataSensors[] = {
+    MakeAnalogRpmDataSensor(&kWheelSpeedData),
 };
 
 constexpr SensorDescriptor kFastGroupSensors[] = {
-    MakePwmRpmDataSensor(&kWheelSpeedData),
+    MakeAnalogRpmDataSensor(&kWheelSpeedData),
     MakeAnalogSensor(&kRLSuspensionSensor),
     MakeAnalogSensor(&kRRSuspensionSensor),
     MakeAnalogSensor(&kThrottlePosSensor),
@@ -110,9 +112,16 @@ constexpr MessageGroupConfig kRearGroups[] = {
         .name = "Wheel Speed Stats",
         .canId = 0x102,
         .pollIntervalMs = 250,
-        .sensors = kPwmRpmStatsSensors,
-        .sensorCount = sizeof(kPwmRpmStatsSensors) / sizeof(kPwmRpmStatsSensors[0]),
+        .sensors = kAnalogRpmStatsSensors,
+        .sensorCount = sizeof(kAnalogRpmStatsSensors) / sizeof(kAnalogRpmStatsSensors[0]),
     },
+    {
+        .name = "Wheel Speed Data",
+        .canId = 0x103,
+        .pollIntervalMs = 10,
+        .sensors = kAnalogRPMDataSensors,
+        .sensorCount = sizeof(kAnalogRPMDataSensors) / sizeof(kAnalogRPMDataSensors[0]),
+    }
 };
 
 // Board Config
