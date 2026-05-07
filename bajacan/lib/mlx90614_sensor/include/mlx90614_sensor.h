@@ -4,7 +4,6 @@
 #include <config.h>
 #include <stdint.h>
 
-// Preserve the conventional default MLX90614 address used by existing configs.
 constexpr uint8_t MLX90614_I2CADDR = 0x5AU;
 
 constexpr uint8_t kMLX90614SampleFrameVersion = 1U;
@@ -21,6 +20,8 @@ constexpr int16_t kMLX90614SensorErrorBeginInvalidId = -2;
 constexpr int16_t kMLX90614SensorErrorAmbientReadFailed = -3;
 constexpr int16_t kMLX90614SensorErrorObjectReadFailed = -4;
 constexpr int16_t kMLX90614SensorErrorEmissivityReadFailed = -5;
+constexpr int16_t kMLX90614SensorErrorLowLevelWriteFailed = -6;
+constexpr int16_t kMLX90614SensorErrorLowLevelShortRead = -7;
 constexpr int16_t kMLX90614SensorErrorBeginFailed = -15;
 constexpr int16_t kMLX90614SensorErrorNotInitialized = -16;
 
@@ -42,68 +43,48 @@ constexpr uint8_t kMLX90614SensorPayloadSize =
 class MLX90614Driver : public DFRobot_MLX90614_I2C {
  public:
   MLX90614Driver(uint8_t i2cAddress = MLX90614_I2CADDR,
-                 TwoWire *wire = &Wire, uint32_t clockHz = 0U)
-      : DFRobot_MLX90614_I2C(i2cAddress, wire),
+                 TwoWire *wire = &Wire, int sdaPin = -1, int sclPin = -1)
+      : DFRobot_MLX90614_I2C(i2cAddress, wire, sdaPin, sclPin),
         wire_(wire),
-        clockHz_(clockHz) {}
-
-  int begin(void) override {
-    if (wire_ == nullptr) {
-      return kMLX90614SensorErrorBeginDataBus;
-    }
-
-    wire_->begin();
-    ApplyConfiguredClock();
-    delay(50);
-
-    uint8_t idBuf[2] = {};
-    int result = ReadIdRegister(idBuf);
-    if (result == NO_ERR) {
-      return result;
-    }
-
-    enterSleepMode(false);
-    ApplyConfiguredClock();
-    delay(50);
-
-    result = ReadIdRegister(idBuf);
-    ApplyConfiguredClock();
-    return result;
-  }
+        sdaPin_(sdaPin),
+        sclPin_(sclPin) {}
 
   size_t ReadRegister(uint8_t reg, void *buf) {
     return DFRobot_MLX90614_I2C::readReg(reg, buf);
   }
 
+  void Wake() {
+    enterSleepMode(false);
+  }
+
+  TwoWire *wire() const {
+    return wire_;
+  }
+
+  int sdaPin() const {
+    return sdaPin_;
+  }
+
+  int sclPin() const {
+    return sclPin_;
+  }
+
  private:
-  int ReadIdRegister(uint8_t *buf) {
-    if (buf == nullptr || ReadRegister(MLX90614_ID_NUMBER, buf) != 2U) {
-      return ERR_DATA_BUS;
-    }
-
-    const uint16_t id =
-        static_cast<uint16_t>(buf[0]) |
-        (static_cast<uint16_t>(buf[1]) << 8);
-    return id == 0U ? ERR_IC_VERSION : NO_ERR;
-  }
-
-  void ApplyConfiguredClock() {
-    if (wire_ != nullptr && clockHz_ != 0U) {
-      wire_->setClock(clockHz_);
-    }
-  }
-
   TwoWire *wire_;
-  uint32_t clockHz_;
+  int sdaPin_;
+  int sclPin_;
 };
 
 struct MLX90614SensorRuntime {
-  explicit MLX90614SensorRuntime(TwoWire *wireBus = &Wire)
-      : wire(wireBus), driver(MLX90614_I2CADDR, wireBus, 0U) {}
+  explicit MLX90614SensorRuntime(TwoWire *wireBus = &Wire, int sdaPin = -1, int sclPin = -1)
+      : wire(wireBus), sdaPin(sdaPin), sclPin(sclPin) {}
 
   TwoWire *wire = &Wire;
+  int sdaPin = -1;
+  int sclPin = -1;
   MLX90614Driver driver;
   bool initialized = false;
+  bool firstSampleDebugPrinted = false;
   int16_t lastError = kMLX90614SensorErrorNone;
   uint16_t cachedEmissivityReg = 0U;
   bool emissivityCached = false;
