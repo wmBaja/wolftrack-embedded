@@ -1,7 +1,6 @@
 #pragma once
 
 #include <analog_sensor.h>
-#include <analog_rpm_sensor.h>
 #include <as5600_sensor.h>
 #include <bno085_sensor.h>
 #include <config.h>
@@ -18,25 +17,14 @@ constexpr BoardHooks kExampleHooks{
 // Runtime objects for sensors
 
 inline MLX90614SensorRuntime gIRRuntime{&Wire1};
-inline AnalogRpmSensorRuntime gWheelSpeedRuntime{};
 
 // Grouped sensors table; add entries as real sensors are implemented.
 
-constexpr AnalogRpmSubSensorContext kWheelSpeedData{
+constexpr AnalogSensorContext kWheelSpeedRawSensor{
     .base = {
-        .name = "Wheel Speed Data",
-        .payloadSize = kAnalogRpmDataSensorPayloadSize,
+        .name = "Wheel Speed Raw",
+        .payloadSize = kAnalogSensorPayloadSize,
     },
-    .runtime = &gWheelSpeedRuntime,
-    .pin = PIN_PD4,
-};
-
-constexpr AnalogRpmSubSensorContext kWheelSpeedStats{
-    .base = {
-        .name = "Wheel Speed Stats",
-        .payloadSize = kAnalogRpmStatsSensorPayloadSize,
-    },
-    .runtime = &gWheelSpeedRuntime,
     .pin = PIN_PD4,
 };
 
@@ -78,16 +66,11 @@ constexpr SensorDescriptor kIRSensorGroup[] = {
     MakeMLX90614Sensor(&kIRSensorCVT),
 };
 
-constexpr SensorDescriptor kAnalogRpmStatsSensors[] = {
-    MakeAnalogRpmStatsSensor(&kWheelSpeedStats),
-};
-
-constexpr SensorDescriptor kAnalogRPMDataSensors[] = {
-    MakeAnalogRpmDataSensor(&kWheelSpeedData),
+constexpr SensorDescriptor kWheelSpeedRawGroup[] = {
+    MakeAnalogSensor(&kWheelSpeedRawSensor),
 };
 
 constexpr SensorDescriptor kFastGroupSensors[] = {
-    MakeAnalogRpmDataSensor(&kWheelSpeedData),
     MakeAnalogSensor(&kRLSuspensionSensor),
     MakeAnalogSensor(&kRRSuspensionSensor),
     MakeAnalogSensor(&kThrottlePosSensor),
@@ -109,19 +92,12 @@ constexpr MessageGroupConfig kRearGroups[] = {
         .sensorCount = sizeof(kIRSensorGroup) / sizeof(kIRSensorGroup[0]),
     },
     {
-        .name = "Wheel Speed Stats",
+        .name = "Wheel Speed Raw",
         .canId = 0x102,
-        .pollIntervalMs = 250,
-        .sensors = kAnalogRpmStatsSensors,
-        .sensorCount = sizeof(kAnalogRpmStatsSensors) / sizeof(kAnalogRpmStatsSensors[0]),
-    },
-    {
-        .name = "Wheel Speed Data",
-        .canId = 0x103,
         .pollIntervalMs = 10,
-        .sensors = kAnalogRPMDataSensors,
-        .sensorCount = sizeof(kAnalogRPMDataSensors) / sizeof(kAnalogRPMDataSensors[0]),
-    }
+        .sensors = kWheelSpeedRawGroup,
+        .sensorCount = sizeof(kWheelSpeedRawGroup) / sizeof(kWheelSpeedRawGroup[0]),
+    },
 };
 
 // Board Config

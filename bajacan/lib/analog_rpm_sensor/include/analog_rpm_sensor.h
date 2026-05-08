@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Arduino.h>
 #include <config.h>
 #include <stdint.h>
 
@@ -10,14 +11,18 @@ constexpr uint8_t kAnalogRpmSampleValidRpm = 0x02U;
 
 constexpr uint16_t kAnalogRpmCountsPerRevolution = 4096U;
 constexpr uint16_t kAnalogRpmCentiDegreesPerRevolution = 36000U;
-constexpr uint16_t kAnalogRpmAdcMaxCounts = 1023U;
+constexpr uint8_t kAnalogRpmAdcResolutionBits = ADC_NATIVE_RESOLUTION;
+constexpr uint16_t kAnalogRpmAdcMaxCounts =
+    static_cast<uint16_t>((1UL << kAnalogRpmAdcResolutionBits) - 1UL);
+constexpr uint8_t kAnalogRpmAdcSampleDuration = 255U;
 constexpr uint8_t kAnalogRpmZeroDeltaDeadbandCounts = 8U;
-constexpr uint32_t kAnalogRpmMaxSampleIntervalMicros = 15000UL;
+constexpr uint32_t kAnalogRpmMaxSampleIntervalMicros = 25000UL;
 
 constexpr int16_t kAnalogRpmSensorErrorNone = 0;
 constexpr int16_t kAnalogRpmSensorErrorNotInitialized = -1;
 constexpr int16_t kAnalogRpmSensorErrorZeroDeltaTime = -2;
 constexpr int16_t kAnalogRpmSensorErrorSampleTooOld = -3;
+constexpr int16_t kAnalogRpmSensorErrorAdcReadFailed = -4;
 
 struct __attribute__((packed)) AnalogRpmDataSampleFrame {
   uint8_t version;
@@ -50,10 +55,11 @@ constexpr uint8_t kAnalogRpmStatsSensorPayloadSize =
 
 struct AnalogRpmSensorRuntime {
   bool initialized = false;
-  bool hasPreviousSample = false;
+  bool hasSample = false;
   bool hasFilteredRpm = false;
   uint16_t previousRawAngle = 0U;
   uint32_t previousSampleAtMicros = 0U;
+  uint32_t lastSampleAtMicros = 0U;
 
   int16_t lastError = kAnalogRpmSensorErrorNone;
   uint8_t validMask = 0U;

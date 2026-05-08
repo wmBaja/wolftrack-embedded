@@ -9,6 +9,31 @@ const AnalogRpmSubSensorContext *GetAnalogRpmContext(const void *ctx) {
   return static_cast<const AnalogRpmSubSensorContext *>(ctx);
 }
 
+int32_t ReadSettledAdc(const uint8_t pin) {
+  const uint8_t previousReference = getAnalogReference();
+  const uint8_t previousResolution =
+      static_cast<uint8_t>(getAnalogReadResolution());
+  const uint8_t previousSampleDuration = getAnalogSampleDuration();
+
+  analogReference(VDD);
+  analogReadResolution(kAnalogRpmAdcResolutionBits);
+  analogSampleDuration(kAnalogRpmAdcSampleDuration);
+
+  // Read the AS5600 as a direct 0-5 V to 0-4095 conversion. The first sample
+  // is discarded so the ADC mux/sample capacitor can settle on PD4.
+  const int16_t firstReading = analogRead(pin);
+  const int16_t secondReading = analogRead(pin);
+
+  analogSampleDuration(previousSampleDuration);
+  analogReadResolution(previousResolution);
+  analogReference(previousReference);
+
+  if (secondReading >= 0) {
+    return secondReading;
+  }
+  return firstReading;
+}
+
 uint16_t AdcToRawAngle(const uint16_t rawAdc) {
   const uint32_t scaled =
       (static_cast<uint32_t>(rawAdc) * (kAnalogRpmCountsPerRevolution - 1U)) +
@@ -63,10 +88,11 @@ int32_t AbsoluteValue(const int32_t value) {
 
 void ResetRuntime(AnalogRpmSensorRuntime &runtime) {
   runtime.initialized = true;
-  runtime.hasPreviousSample = false;
+  runtime.hasSample = false;
   runtime.hasFilteredRpm = false;
   runtime.previousRawAngle = 0U;
   runtime.previousSampleAtMicros = 0U;
+  runtime.lastSampleAtMicros = 0U;
   runtime.lastError = kAnalogRpmSensorErrorNone;
   runtime.validMask = 0U;
   runtime.rawAdc = 0U;
@@ -83,20 +109,32 @@ void UpdateRuntimeData(const AnalogRpmSubSensorContext &config) {
     return;
   }
 
-  runtime->rawAdc = static_cast<uint16_t>(analogRead(config.pin));
-  runtime->rawAngle = AdcToRawAngle(runtime->rawAdc);
-  runtime->angleCentiDegrees = RawAngleToCentiDegrees(runtime->rawAngle);
-
+  const int32_t rawAdcReading = ReadSettledAdc(config.pin);
   const uint32_t now = micros();
   runtime->lastError = kAnalogRpmSensorErrorNone;
-  runtime->validMask = kAnalogRpmSampleValidAngle;
-  runtime->sampleIntervalMicros = 0U;
-  runtime->lastRawMilliRpm = 0;
+  runtime->validMask = 0U;
 
-  if (!runtime->hasPreviousSample) {
-    runtime->hasPreviousSample = true;
+  if (rawAdcReading < 0) {
+    runtime->lastError = kAnalogRpmSensorErrorAdcReadFailed;
+    runtime->sampleIntervalMicros = 0U;
+    runtime->lastRawMilliRpm = 0;
+    runtime->lastFilteredMilliRpm = 0;
+    runtime->hasFilteredRpm = false;
+    return;
+  }
+
+  runtime->rawAdc = static_cast<uint16_t>(rawAdcReading);
+  runtime->rawAngle = AdcToRawAngle(runtime->rawAdc);
+  runtime->angleCentiDegrees = RawAngleToCentiDegrees(runtime->rawAngle);
+  runtime->validMask = kAnalogRpmSampleValidAngle;
+  runtime->lastSampleAtMicros = now;
+
+  if (!runtime->hasSample) {
+    runtime->hasSample = true;
     runtime->previousRawAngle = runtime->rawAngle;
     runtime->previousSampleAtMicros = now;
+    runtime->sampleIntervalMicros = 0U;
+    runtime->lastRawMilliRpm = 0;
     runtime->lastFilteredMilliRpm = 0;
     runtime->hasFilteredRpm = false;
     return;
@@ -107,15 +145,7 @@ void UpdateRuntimeData(const AnalogRpmSubSensorContext &config) {
 
   if (runtime->sampleIntervalMicros == 0U) {
     runtime->lastError = kAnalogRpmSensorErrorZeroDeltaTime;
-    runtime->lastFilteredMilliRpm = 0;
-    runtime->hasFilteredRpm = false;
-    runtime->previousRawAngle = runtime->rawAngle;
-    runtime->previousSampleAtMicros = now;
-    return;
-  }
-
-  if (runtime->sampleIntervalMicros > kAnalogRpmMaxSampleIntervalMicros) {
-    runtime->lastError = kAnalogRpmSensorErrorSampleTooOld;
+    runtime->lastRawMilliRpm = 0;
     runtime->lastFilteredMilliRpm = 0;
     runtime->hasFilteredRpm = false;
     runtime->previousRawAngle = runtime->rawAngle;
@@ -140,9 +170,61 @@ void UpdateRuntimeData(const AnalogRpmSubSensorContext &config) {
         (runtime->lastRawMilliRpm - runtime->lastFilteredMilliRpm) / 4;
   }
 
+  if (runtime->sampleIntervalMicros > kAnalogRpmMaxSampleIntervalMicros) {
+    runtime->lastError = kAnalogRpmSensorErrorSampleTooOld;
+  }
+
   runtime->validMask = kAnalogRpmSampleValidAngle | kAnalogRpmSampleValidRpm;
   runtime->previousRawAngle = runtime->rawAngle;
   runtime->previousSampleAtMicros = now;
+}
+
+void CopyDataFrame(const AnalogRpmSensorRuntime &runtime,
+                   AnalogRpmDataSampleFrame &sample) {
+  sample.version = kAnalogRpmSampleFrameVersion;
+  sample.validMask = runtime.validMask;
+  sample.error = runtime.lastError;
+  sample.milliRpm = runtime.lastFilteredMilliRpm;
+}
+
+void CopyStatsFrame(const AnalogRpmSensorRuntime &runtime,
+                    AnalogRpmStatsSampleFrame &sample) {
+  sample.version = kAnalogRpmSampleFrameVersion;
+  sample.validMask = runtime.validMask;
+  sample.rawAdc = runtime.rawAdc;
+  sample.rawAngle = runtime.rawAngle;
+  sample.angleCentiDegrees = runtime.angleCentiDegrees;
+  sample.sampleIntervalMicros = runtime.sampleIntervalMicros;
+  sample.rawMilliRpm = runtime.lastRawMilliRpm;
+  sample.filteredMilliRpm = runtime.lastFilteredMilliRpm;
+  sample.error = runtime.lastError;
+}
+
+void ApplyCachedSampleFreshness(const uint32_t now,
+                                AnalogRpmStatsSampleFrame &sample,
+                                const AnalogRpmSensorRuntime &runtime) {
+  if (!runtime.hasSample) {
+    sample.validMask = 0U;
+    sample.error = kAnalogRpmSensorErrorSampleTooOld;
+    sample.sampleIntervalMicros = 0U;
+    sample.rawMilliRpm = 0;
+    sample.filteredMilliRpm = 0;
+    return;
+  }
+
+  if (runtime.lastError == kAnalogRpmSensorErrorAdcReadFailed) {
+    return;
+  }
+
+  const uint32_t sampleAgeMicros = now - runtime.lastSampleAtMicros;
+  if (sampleAgeMicros <= kAnalogRpmMaxSampleIntervalMicros) {
+    return;
+  }
+
+  sample.error = kAnalogRpmSensorErrorSampleTooOld;
+  sample.validMask &= static_cast<uint8_t>(~kAnalogRpmSampleValidRpm);
+  sample.rawMilliRpm = 0;
+  sample.filteredMilliRpm = 0;
 }
 
 }  // namespace
@@ -177,10 +259,7 @@ bool AnalogRpmDataSensorSample(const void *ctx, CANFDMessage &outFrame) {
   UpdateRuntimeData(*config);
 
   AnalogRpmDataSampleFrame sample = {};
-  sample.version = kAnalogRpmSampleFrameVersion;
-  sample.validMask = config->runtime->validMask;
-  sample.error = config->runtime->lastError;
-  sample.milliRpm = config->runtime->lastFilteredMilliRpm;
+  CopyDataFrame(*config->runtime, sample);
 
   outFrame.len = sizeof(sample);
   memcpy(outFrame.data, &sample, sizeof(sample));
@@ -199,18 +278,9 @@ bool AnalogRpmStatsSensorSample(const void *ctx, CANFDMessage &outFrame) {
     return true;
   }
 
-  UpdateRuntimeData(*config);
-
   AnalogRpmStatsSampleFrame sample = {};
-  sample.version = kAnalogRpmSampleFrameVersion;
-  sample.validMask = config->runtime->validMask;
-  sample.rawAdc = config->runtime->rawAdc;
-  sample.rawAngle = config->runtime->rawAngle;
-  sample.angleCentiDegrees = config->runtime->angleCentiDegrees;
-  sample.sampleIntervalMicros = config->runtime->sampleIntervalMicros;
-  sample.rawMilliRpm = config->runtime->lastRawMilliRpm;
-  sample.filteredMilliRpm = config->runtime->lastFilteredMilliRpm;
-  sample.error = config->runtime->lastError;
+  CopyStatsFrame(*config->runtime, sample);
+  ApplyCachedSampleFreshness(micros(), sample, *config->runtime);
 
   outFrame.len = sizeof(sample);
   memcpy(outFrame.data, &sample, sizeof(sample));
