@@ -6,6 +6,8 @@
 namespace {
 
 constexpr size_t kMaxPulseRpmSensors = 4U;
+constexpr uint32_t kPulseRpmOutlierPercent = 50U;
+constexpr uint32_t kPulseRpmStepChangePercent = 15U;
 
 PulseRpmSensorRuntime *gPulseRpmRuntimes[kMaxPulseRpmSensors] = {nullptr};
 PulseRpmSubSensorContext const *gPulseRpmConfigs[kMaxPulseRpmSensors] = {
@@ -43,6 +45,73 @@ uint32_t GetMinPulseSpacingMicros(const PulseRpmSubSensorContext &config) {
   return config.minPulseSpacingMicros;
 }
 
+uint32_t ComputeAverageInterval(const PulseRpmSensorRuntime &runtime) {
+  if (runtime.acceptedPulseIntervalCount == 0U) {
+    return 0U;
+  }
+
+  return (runtime.acceptedPulseIntervalSum +
+          (runtime.acceptedPulseIntervalCount / 2U)) /
+         runtime.acceptedPulseIntervalCount;
+}
+
+void ResetAcceptedIntervalHistory(PulseRpmSensorRuntime &runtime) {
+  memset(runtime.acceptedPulseIntervals, 0, sizeof(runtime.acceptedPulseIntervals));
+  runtime.acceptedPulseIntervalSum = 0U;
+  runtime.acceptedPulseIntervalHead = 0U;
+  runtime.acceptedPulseIntervalCount = 0U;
+  runtime.averagedPulseIntervalMicros = 0U;
+}
+
+void ClearPendingOutlier(PulseRpmSensorRuntime &runtime) {
+  runtime.pendingOutlierIntervalMicros = 0U;
+  runtime.hasPendingOutlier = false;
+}
+
+void PushAcceptedInterval(PulseRpmSensorRuntime &runtime,
+                          const uint32_t intervalMicros) {
+  if (runtime.acceptedPulseIntervalCount <
+      kPulseRpmIntervalAverageWindow) {
+    runtime.acceptedPulseIntervals[runtime.acceptedPulseIntervalHead] =
+        intervalMicros;
+    runtime.acceptedPulseIntervalSum += intervalMicros;
+    ++runtime.acceptedPulseIntervalCount;
+  } else {
+    runtime.acceptedPulseIntervalSum -=
+        runtime.acceptedPulseIntervals[runtime.acceptedPulseIntervalHead];
+    runtime.acceptedPulseIntervals[runtime.acceptedPulseIntervalHead] =
+        intervalMicros;
+    runtime.acceptedPulseIntervalSum += intervalMicros;
+  }
+
+  runtime.acceptedPulseIntervalHead =
+      static_cast<uint8_t>((runtime.acceptedPulseIntervalHead + 1U) %
+                           kPulseRpmIntervalAverageWindow);
+  runtime.averagedPulseIntervalMicros = ComputeAverageInterval(runtime);
+}
+
+void SeedAcceptedIntervals(PulseRpmSensorRuntime &runtime, const uint32_t first,
+                           const uint32_t second) {
+  ResetAcceptedIntervalHistory(runtime);
+  PushAcceptedInterval(runtime, first);
+  PushAcceptedInterval(runtime, second);
+}
+
+bool IsWithinPercentWindow(const uint32_t candidate, const uint32_t reference,
+                           const uint32_t percent) {
+  if (reference == 0U) {
+    return candidate == 0U;
+  }
+
+  const uint64_t tolerance =
+      (static_cast<uint64_t>(reference) * percent + 99ULL) / 100ULL;
+  const uint64_t lowerBound =
+      reference > tolerance ? reference - tolerance : 0ULL;
+  const uint64_t upperBound = static_cast<uint64_t>(reference) + tolerance;
+  return static_cast<uint64_t>(candidate) >= lowerBound &&
+         static_cast<uint64_t>(candidate) <= upperBound;
+}
+
 void ResetRuntime(PulseRpmSensorRuntime &runtime) {
   runtime.initialized = false;
   runtime.initializationError = kPulseRpmSensorErrorNotInitialized;
@@ -51,6 +120,9 @@ void ResetRuntime(PulseRpmSensorRuntime &runtime) {
   runtime.isrAcceptedPulseCount = 0U;
   runtime.isrRejectedPulseCount = 0U;
   runtime.lastProcessedAcceptedPulseCount = 0U;
+  runtime.filterRejectedPulseCount = 0U;
+  ResetAcceptedIntervalHistory(runtime);
+  ClearPendingOutlier(runtime);
   runtime.hasValidInterval = false;
   runtime.validMask = 0U;
   runtime.pulseIntervalMicros = 0U;
@@ -120,6 +192,67 @@ int32_t ComputeMilliRpm(const PulseRpmSubSensorContext &config,
   return static_cast<int32_t>(milliRpm);
 }
 
+void UpdateAcceptedRpm(const PulseRpmSubSensorContext &config,
+                       PulseRpmSensorRuntime &runtime,
+                       const uint32_t intervalMicros) {
+  PushAcceptedInterval(runtime, intervalMicros);
+  runtime.hasValidInterval = runtime.acceptedPulseIntervalCount > 0U;
+  runtime.lastMilliRpm =
+      ComputeMilliRpm(config, runtime.averagedPulseIntervalMicros);
+  ClearPendingOutlier(runtime);
+}
+
+void HandleNewPulseInterval(const PulseRpmSubSensorContext &config,
+                            PulseRpmSensorRuntime &runtime,
+                            const uint32_t intervalMicros) {
+  runtime.pulseIntervalMicros = intervalMicros;
+
+  if (intervalMicros == 0U) {
+    return;
+  }
+
+  if (runtime.acceptedPulseIntervalCount == 0U) {
+    UpdateAcceptedRpm(config, runtime, intervalMicros);
+    return;
+  }
+
+  const uint32_t averageInterval = runtime.averagedPulseIntervalMicros;
+  const bool matchesAverage =
+      IsWithinPercentWindow(intervalMicros, averageInterval,
+                            kPulseRpmOutlierPercent);
+  if (matchesAverage) {
+    if (runtime.hasPendingOutlier) {
+      ++runtime.filterRejectedPulseCount;
+      ClearPendingOutlier(runtime);
+    }
+
+    UpdateAcceptedRpm(config, runtime, intervalMicros);
+    return;
+  }
+
+  if (!runtime.hasPendingOutlier) {
+    runtime.pendingOutlierIntervalMicros = intervalMicros;
+    runtime.hasPendingOutlier = true;
+    return;
+  }
+
+  const bool matchesPending = IsWithinPercentWindow(
+      intervalMicros, runtime.pendingOutlierIntervalMicros,
+      kPulseRpmStepChangePercent);
+  if (matchesPending) {
+    SeedAcceptedIntervals(runtime, runtime.pendingOutlierIntervalMicros,
+                          intervalMicros);
+    runtime.hasValidInterval = true;
+    runtime.lastMilliRpm =
+        ComputeMilliRpm(config, runtime.averagedPulseIntervalMicros);
+    ClearPendingOutlier(runtime);
+    return;
+  }
+
+  ++runtime.filterRejectedPulseCount;
+  runtime.pendingOutlierIntervalMicros = intervalMicros;
+}
+
 void UpdateRuntimeData(const PulseRpmSubSensorContext &config) {
   PulseRpmSensorRuntime *runtime = config.runtime;
   if (runtime == nullptr) {
@@ -131,24 +264,22 @@ void UpdateRuntimeData(const PulseRpmSubSensorContext &config) {
   const uint32_t staleAfterMicros = GetStaleAfterMicros(config);
 
   runtime->acceptedPulseCount = snapshot.acceptedPulseCount;
-  runtime->rejectedPulseCount = snapshot.rejectedPulseCount;
+  runtime->rejectedPulseCount =
+      snapshot.rejectedPulseCount + runtime->filterRejectedPulseCount;
   runtime->sampleAgeMicros = snapshot.acceptedPulseCount == 0U
                                  ? 0U
                                  : now - snapshot.lastAcceptedEdgeMicros;
 
   if (snapshot.acceptedPulseCount > runtime->lastProcessedAcceptedPulseCount) {
     runtime->lastProcessedAcceptedPulseCount = snapshot.acceptedPulseCount;
-    if (snapshot.acceptedPulseCount >= 2U &&
-        snapshot.lastPulseIntervalMicros <= staleAfterMicros) {
-      runtime->pulseIntervalMicros = snapshot.lastPulseIntervalMicros;
-      runtime->lastMilliRpm =
-          ComputeMilliRpm(config, runtime->pulseIntervalMicros);
-      runtime->hasValidInterval = true;
+    if (snapshot.acceptedPulseCount >= 2U) {
+      HandleNewPulseInterval(config, *runtime, snapshot.lastPulseIntervalMicros);
     } else {
       runtime->pulseIntervalMicros = 0U;
-      runtime->lastMilliRpm = 0;
-      runtime->hasValidInterval = false;
     }
+
+    runtime->rejectedPulseCount =
+        snapshot.rejectedPulseCount + runtime->filterRejectedPulseCount;
   }
 
   runtime->validMask = 0U;
@@ -164,6 +295,9 @@ void UpdateRuntimeData(const PulseRpmSubSensorContext &config) {
   if (snapshot.acceptedPulseCount < 2U) {
     runtime->pulseIntervalMicros = 0U;
     runtime->lastMilliRpm = 0;
+    runtime->hasValidInterval = false;
+    ResetAcceptedIntervalHistory(*runtime);
+    ClearPendingOutlier(*runtime);
     if (runtime->sampleAgeMicros > staleAfterMicros) {
       runtime->lastError = kPulseRpmSensorErrorStaleTimeout;
     }
@@ -198,6 +332,8 @@ void CopyStatsFrame(const PulseRpmSensorRuntime &runtime,
   sample.version = kPulseRpmSampleFrameVersion;
   sample.validMask = runtime.validMask;
   sample.pulseIntervalMicros = runtime.pulseIntervalMicros;
+  sample.averagedPulseIntervalMicros = runtime.averagedPulseIntervalMicros;
+  sample.pendingOutlierIntervalMicros = runtime.pendingOutlierIntervalMicros;
   sample.sampleAgeMicros = runtime.sampleAgeMicros;
   sample.acceptedPulseCount = runtime.acceptedPulseCount;
   sample.rejectedPulseCount = runtime.rejectedPulseCount;
@@ -219,6 +355,8 @@ void FillUninitializedStatsFrame(const PulseRpmSensorRuntime *runtime,
   sample.version = kPulseRpmSampleFrameVersion;
   sample.validMask = 0U;
   sample.pulseIntervalMicros = 0U;
+  sample.averagedPulseIntervalMicros = 0U;
+  sample.pendingOutlierIntervalMicros = 0U;
   sample.sampleAgeMicros = 0U;
   sample.acceptedPulseCount = 0U;
   sample.rejectedPulseCount = 0U;
