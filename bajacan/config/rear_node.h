@@ -24,6 +24,24 @@ inline PulseRpmSensorRuntime gEngineRpmRuntime{};
 
 // Grouped sensors table; add entries as real sensors are implemented.
 
+constexpr AnalogRpmSubSensorContext kWheelSpeedRpmSensorData{
+    .base = {
+        .name = "Wheel Speed RPM Data",
+        .payloadSize = kAnalogRpmDataSensorPayloadSize,
+    },
+    .runtime = &gWheelSpeedRpmRuntime,
+    .pin = PIN_PD4,
+};
+
+constexpr AnalogRpmSubSensorContext kWheelSpeedRpmSensorStats{
+    .base = {
+        .name = "Wheel Speed RPM Stats",
+        .payloadSize = kAnalogRpmStatsSensorPayloadSize,
+    },
+    .runtime = &gWheelSpeedRpmRuntime,
+    .pin = PIN_PD4,
+};
+
 constexpr PulseRpmSubSensorContext kEngineRpmSensorData{
     .base = {
         .name = "Engine RPM Data",
@@ -88,6 +106,14 @@ constexpr SensorDescriptor kIRSensorGroup[] = {
     MakeMLX90614Sensor(&kIRSensorCVT),
 };
 
+constexpr SensorDescriptor kWheelSpeedRpmDataGroup[] = {
+    MakeAnalogRpmDataSensor(&kWheelSpeedRpmSensorData),
+};
+
+constexpr SensorDescriptor kWheelSpeedRpmStatsGroup[] = {
+    MakeAnalogRpmStatsSensor(&kWheelSpeedRpmSensorStats),
+};
+
 constexpr SensorDescriptor kEngineRpmDataGroup[] = {
     MakePulseRpmDataSensor(&kEngineRpmSensorData),
 };
@@ -118,8 +144,26 @@ constexpr MessageGroupConfig kRearGroups[] = {
         .sensorCount = sizeof(kIRSensorGroup) / sizeof(kIRSensorGroup[0]),
     },
     {
-        .name = "Engine RPM Data",
+        .name = "Wheel Speed RPM Data",
         .canId = 0x102,
+        .pollIntervalMs = 10,
+        .sensors = kWheelSpeedRpmDataGroup,
+        .sensorCount =
+            sizeof(kWheelSpeedRpmDataGroup) /
+            sizeof(kWheelSpeedRpmDataGroup[0]),
+    },
+    {
+        .name = "Wheel Speed RPM Stats",
+        .canId = 0x103,
+        .pollIntervalMs = 100,
+        .sensors = kWheelSpeedRpmStatsGroup,
+        .sensorCount =
+            sizeof(kWheelSpeedRpmStatsGroup) /
+            sizeof(kWheelSpeedRpmStatsGroup[0]),
+    },
+    {
+        .name = "Engine RPM Data",
+        .canId = 0x104,
         .pollIntervalMs = 10,
         .sensors = kEngineRpmDataGroup,
         .sensorCount =
@@ -127,7 +171,7 @@ constexpr MessageGroupConfig kRearGroups[] = {
     },
     {
         .name = "Engine RPM Stats",
-        .canId = 0x103,
+        .canId = 0x105,
         .pollIntervalMs = 100,
         .sensors = kEngineRpmStatsGroup,
         .sensorCount =

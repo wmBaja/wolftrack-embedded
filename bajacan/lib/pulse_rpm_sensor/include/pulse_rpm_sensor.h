@@ -20,8 +20,8 @@ constexpr int16_t kPulseRpmSensorErrorInsufficientSamples = -3;
 constexpr int16_t kPulseRpmSensorErrorStaleTimeout = -4;
 constexpr int16_t kPulseRpmSensorErrorNoIsrSlotAvailable = -5;
 
-constexpr uint16_t kFourStrokeEnginePulsesPerRevolution = 2000U;
-constexpr uint16_t kTwoStrokeEnginePulsesPerRevolution = 1000U;
+constexpr uint16_t kFourStrokeEnginePulsesPerRevolution = 1000U;
+constexpr uint16_t kTwoStrokeEnginePulsesPerRevolution = 500U;
 
 struct __attribute__((packed)) PulseRpmDataSampleFrame {
   uint8_t version;
