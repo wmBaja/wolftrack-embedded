@@ -19,6 +19,17 @@ constexpr BoardHooks kExampleHooks{
 inline AS5600SensorRuntime gSteeringAngleRuntime{&Wire1};
 inline BNO085SensorRuntime gImuRuntime{};
 
+constexpr uint16_t kSteeringZPosition = 3419U;
+constexpr uint16_t kSteeringMPosition = 1650U;
+constexpr float kSteeringMaxAngleDegrees =
+    ((static_cast<float>(kAS5600CountsPerRevolution - kSteeringZPosition +
+                         kSteeringMPosition) /
+      static_cast<float>(kAS5600CountsPerRevolution)) *
+     360.0f) /
+    2.0f;
+constexpr int16_t kSteeringMaxAngleCentiDegrees =
+    static_cast<int16_t>(kSteeringMaxAngleDegrees * 100.0f + 0.5f);
+
 
 constexpr BNO085SubSensorContext kIMUData{
     .base = {
@@ -56,6 +67,11 @@ constexpr AS5600SensorContext kSteeringPos{
     .directionPin = AS5600_SW_DIRECTION_PIN,
     .direction = AS5600_CLOCK_WISE,
     .offsetCentiDegrees = 0,
+    .initializePositionWindow = true,
+    .zPosition = kSteeringZPosition,
+    .mPosition = kSteeringMPosition,
+    .angleMapping = AS5600AngleMapping::CenteredWindow,
+    .maxMappedAngleCentiDegrees = kSteeringMaxAngleCentiDegrees,
 };
 
 constexpr AnalogSensorContext kFrontBrakePressureSensor{

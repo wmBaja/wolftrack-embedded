@@ -38,6 +38,18 @@ bool CaptureLastError(AS5600 &driver, int16_t &outError) {
   return true;
 }
 
+int16_t MapAngleToCenteredCentiDegrees(const uint16_t angle,
+                                       const int16_t maxCentiDegrees) {
+  const uint32_t numerator =
+      (static_cast<uint32_t>(angle & 0x0FFFU) *
+       static_cast<uint32_t>(maxCentiDegrees) * 2U) +
+      (kAS5600MaxAngleCount / 2U);
+  const int32_t centered =
+      static_cast<int32_t>(numerator / kAS5600MaxAngleCount) -
+      static_cast<int32_t>(maxCentiDegrees);
+  return static_cast<int16_t>(centered);
+}
+
 }  // namespace
 
 bool AS5600SensorBegin(const void *ctx) {
@@ -82,6 +94,14 @@ bool AS5600SensorBegin(const void *ctx) {
                          100.0f)) {
     return false;
   }
+  if (config->initializePositionWindow) {
+    if (!driver->setZPosition(config->zPosition)) {
+      return false;
+    }
+    if (!driver->setMPosition(config->mPosition)) {
+      return false;
+    }
+  }
 
   config->runtime->initialized = true;
   return true;
@@ -107,10 +127,22 @@ bool AS5600SensorSample(const void *ctx, CANFDMessage &outFrame) {
 
   sample.rawAngle = driver->rawAngle();
   if (!CaptureLastError(*driver, sample.error)) {
-    sample.angleCentiDegrees = AS5600RawAngleToCentiDegrees(sample.rawAngle);
+    uint16_t angleForMapping = sample.rawAngle;
+    if (config->angleMapping == AS5600AngleMapping::CenteredWindow) {
+      angleForMapping = driver->readAngle();
+      if (!CaptureLastError(*driver, sample.error)) {
+        sample.angleCentiDegrees = MapAngleToCenteredCentiDegrees(
+            angleForMapping, config->maxMappedAngleCentiDegrees);
+      }
+    } else {
+      sample.angleCentiDegrees = static_cast<int16_t>(
+          AS5600RawAngleToCentiDegrees(sample.rawAngle));
+    }
 
-    sample.status = driver->readStatus();
-    CaptureLastError(*driver, sample.error);
+    if (sample.error == AS5600_OK) {
+      sample.status = driver->readStatus();
+      CaptureLastError(*driver, sample.error);
+    }
   }
 
   if (sample.error == AS5600_OK) {
