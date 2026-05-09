@@ -5,7 +5,6 @@
 #include <bno085_sensor.h>
 #include <config.h>
 #include <mlx90614_sensor.h>
-#include <pwm_angle_sensor.h>
 #include <Wire.h>
 
 // Example hooks; set to nullptr when unused.
