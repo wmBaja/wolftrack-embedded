@@ -1,5 +1,6 @@
 #pragma once
 
+#include <analog_rpm_sensor.h>
 #include <analog_sensor.h>
 #include <as5600_sensor.h>
 #include <bno085_sensor.h>
@@ -17,7 +18,8 @@ constexpr BoardHooks kExampleHooks{
 
 // Runtime objects for sensors
 
-inline MLX90614SensorRuntime gIRRuntime{&Wire1};
+inline MLX90614SensorRuntime gIRRuntime{&Wire1, PIN_WIRE1_SDA, PIN_WIRE1_SCL};
+inline AnalogRpmSensorRuntime gWheelSpeedRpmRuntime{};
 inline PulseRpmSensorRuntime gEngineRpmRuntime{};
 
 // Grouped sensors table; add entries as real sensors are implemented.
@@ -55,7 +57,7 @@ constexpr MLX90614SensorContext kIRSensorCVT{
     },
     .runtime = &gIRRuntime,
     .i2cAddress = MLX90614_I2CADDR,
-    .clockHz = 100000,
+    .clockHz = 115000,
 };
 
 constexpr AnalogSensorContext kRLSuspensionSensor{
