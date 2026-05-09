@@ -6,6 +6,7 @@
 
 constexpr uint16_t kAS5600CountsPerRevolution = 4096U;
 constexpr uint32_t kAS5600CentiDegreesPerRevolution = 36000UL;
+constexpr uint16_t kAS5600MaxAngleCount = kAS5600CountsPerRevolution - 1U;
 
 // Raw AS5600 status-register bit masks from the datasheet.
 constexpr uint8_t kAS5600StatusMagnetTooStrong = 0x08U;
@@ -13,6 +14,11 @@ constexpr uint8_t kAS5600StatusMagnetTooWeak = 0x10U;
 constexpr uint8_t kAS5600StatusMagnetDetected = 0x20U;
 
 constexpr int16_t kAS5600SensorErrorNotInitialized = -1;
+
+enum class AS5600AngleMapping : uint8_t {
+  RawRotation = 0,
+  CenteredWindow = 1,
+};
 
 constexpr uint16_t AS5600RawAngleToCentiDegrees(const uint16_t rawAngle) {
   return static_cast<uint16_t>(
@@ -23,7 +29,7 @@ constexpr uint16_t AS5600RawAngleToCentiDegrees(const uint16_t rawAngle) {
 
 struct __attribute__((packed)) AS5600SampleFrame {
   uint16_t rawAngle;
-  uint16_t angleCentiDegrees;
+  int16_t angleCentiDegrees;
   uint16_t magnitude;
   uint8_t agc;
   uint8_t status;
@@ -51,6 +57,11 @@ struct AS5600SensorContext {
   uint8_t directionPin;
   uint8_t direction;
   int32_t offsetCentiDegrees;
+  bool initializePositionWindow;
+  uint16_t zPosition;
+  uint16_t mPosition;
+  AS5600AngleMapping angleMapping;
+  int16_t maxMappedAngleCentiDegrees;
 };
 
 bool AS5600SensorBegin(const void *ctx);
