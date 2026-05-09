@@ -31,6 +31,9 @@ constexpr AnalogRpmSubSensorContext kWheelSpeedRpmSensorData{
     },
     .runtime = &gWheelSpeedRpmRuntime,
     .pin = PIN_PD4,
+    .zeroDeltaDeadbandCounts = 24U,
+    .motionConfirmSamples = 2U,
+    .zeroConfirmSamples = 2U,
 };
 
 constexpr AnalogRpmSubSensorContext kWheelSpeedRpmSensorStats{
@@ -40,6 +43,9 @@ constexpr AnalogRpmSubSensorContext kWheelSpeedRpmSensorStats{
     },
     .runtime = &gWheelSpeedRpmRuntime,
     .pin = PIN_PD4,
+    .zeroDeltaDeadbandCounts = 24U,
+    .motionConfirmSamples = 2U,
+    .zeroConfirmSamples = 2U,
 };
 
 constexpr PulseRpmSubSensorContext kEngineRpmSensorData{

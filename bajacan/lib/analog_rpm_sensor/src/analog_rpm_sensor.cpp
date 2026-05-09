@@ -5,18 +5,99 @@
 
 namespace {
 
+constexpr uint8_t kAnalogRpmMedianSampleCount = 5U;
+
 const AnalogRpmSubSensorContext *GetAnalogRpmContext(const void *ctx) {
   return static_cast<const AnalogRpmSubSensorContext *>(ctx);
 }
 
-int32_t ReadSettledAdc(const uint8_t pin) {
-  const int32_t firstReading = analogRead(pin);
-  const int32_t secondReading = analogRead(pin);
-
-  if (secondReading >= 0) {
-    return secondReading;
+uint8_t GetZeroDeltaDeadbandCounts(const AnalogRpmSubSensorContext &config) {
+  if (config.zeroDeltaDeadbandCounts == 0U) {
+    return kAnalogRpmZeroDeltaDeadbandCounts;
   }
-  return firstReading;
+  return config.zeroDeltaDeadbandCounts;
+}
+
+uint8_t GetMotionConfirmSamples(const AnalogRpmSubSensorContext &config) {
+  if (config.motionConfirmSamples == 0U) {
+    return kAnalogRpmDefaultMotionConfirmSamples;
+  }
+  return config.motionConfirmSamples;
+}
+
+uint8_t GetZeroConfirmSamples(const AnalogRpmSubSensorContext &config) {
+  if (config.zeroConfirmSamples == 0U) {
+    return kAnalogRpmDefaultZeroConfirmSamples;
+  }
+  return config.zeroConfirmSamples;
+}
+
+void SortAscending(int32_t *values, const uint8_t count) {
+  for (uint8_t i = 1U; i < count; ++i) {
+    const int32_t key = values[i];
+    uint8_t j = i;
+    while (j > 0U && values[j - 1U] > key) {
+      values[j] = values[j - 1U];
+      --j;
+    }
+    values[j] = key;
+  }
+}
+
+int32_t ReadSettledAdc(const uint8_t pin) {
+  int32_t validSamples[kAnalogRpmMedianSampleCount] = {0};
+  uint8_t validCount = 0U;
+  int32_t lastReading = -1;
+
+  for (uint8_t i = 0U; i < kAnalogRpmMedianSampleCount; ++i) {
+    const int32_t reading = analogRead(pin);
+    lastReading = reading;
+    if (reading < 0) {
+      continue;
+    }
+    validSamples[validCount] = reading;
+    ++validCount;
+  }
+
+  if (validCount == 0U) {
+    return lastReading;
+  }
+
+  SortAscending(validSamples, validCount);
+  return validSamples[validCount / 2U];
+}
+
+AnalogRpmMotionFilterConfig MakeMotionFilterConfig(
+    const AnalogRpmSubSensorContext &config) {
+  return AnalogRpmMotionFilterConfig{
+      .zeroDeltaDeadbandCounts = GetZeroDeltaDeadbandCounts(config),
+      .motionConfirmSamples = GetMotionConfirmSamples(config),
+      .zeroConfirmSamples = GetZeroConfirmSamples(config),
+  };
+}
+
+AnalogRpmMotionFilterState MakeMotionFilterState(
+    const AnalogRpmSensorRuntime &runtime) {
+  return AnalogRpmMotionFilterState{
+      .motionConfirmed = runtime.motionConfirmed,
+      .hasFilteredRpm = runtime.hasFilteredRpm,
+      .pendingMotionDirection = runtime.pendingMotionDirection,
+      .consecutiveMotionCount = runtime.consecutiveMotionCount,
+      .consecutiveZeroCount = runtime.consecutiveZeroCount,
+      .lastRawMilliRpm = runtime.lastRawMilliRpm,
+      .lastFilteredMilliRpm = runtime.lastFilteredMilliRpm,
+  };
+}
+
+void ApplyMotionFilterState(const AnalogRpmMotionFilterState &state,
+                            AnalogRpmSensorRuntime &runtime) {
+  runtime.motionConfirmed = state.motionConfirmed;
+  runtime.hasFilteredRpm = state.hasFilteredRpm;
+  runtime.pendingMotionDirection = state.pendingMotionDirection;
+  runtime.consecutiveMotionCount = state.consecutiveMotionCount;
+  runtime.consecutiveZeroCount = state.consecutiveZeroCount;
+  runtime.lastRawMilliRpm = state.lastRawMilliRpm;
+  runtime.lastFilteredMilliRpm = state.lastFilteredMilliRpm;
 }
 
 uint16_t AdcToRawAngle(const uint16_t rawAdc) {
@@ -38,46 +119,29 @@ uint16_t RawAngleToCentiDegrees(const uint16_t rawAngle) {
 
 int32_t ComputeWrappedRawDelta(const uint16_t currentRawAngle,
                                const uint16_t previousRawAngle) {
-  constexpr int32_t kHalfRevolutionCounts =
-      kAnalogRpmCountsPerRevolution / 2;
-
-  int32_t delta = static_cast<int32_t>(currentRawAngle) -
-                  static_cast<int32_t>(previousRawAngle);
-  if (delta > kHalfRevolutionCounts) {
-    delta -= kAnalogRpmCountsPerRevolution;
-  } else if (delta < -kHalfRevolutionCounts) {
-    delta += kAnalogRpmCountsPerRevolution;
-  }
-  return delta;
+  return ComputeAnalogRpmWrappedRawDelta(currentRawAngle, previousRawAngle);
 }
 
 int32_t ComputeMilliRpmFromDelta(const int32_t deltaRawAngle,
                                  const uint32_t deltaTimeMicros) {
-  if (deltaTimeMicros == 0U) {
-    return 0;
-  }
-
-  const float revolutions =
-      static_cast<float>(deltaRawAngle) /
-      static_cast<float>(kAnalogRpmCountsPerRevolution);
-  const float rpm =
-      (revolutions * 60000000.0f) / static_cast<float>(deltaTimeMicros);
-  const float milliRpm = rpm * 1000.0f;
-  return static_cast<int32_t>(milliRpm >= 0.0f ? milliRpm + 0.5f
-                                                : milliRpm - 0.5f);
+  return ComputeAnalogRpmFromDelta(deltaRawAngle, deltaTimeMicros);
 }
 
 int32_t AbsoluteValue(const int32_t value) {
-  return value >= 0 ? value : -value;
+  return AnalogRpmAbsoluteValue(value);
 }
 
 void ResetRuntime(AnalogRpmSensorRuntime &runtime) {
   runtime.initialized = true;
   runtime.hasSample = false;
   runtime.hasFilteredRpm = false;
+  runtime.motionConfirmed = false;
   runtime.previousRawAngle = 0U;
   runtime.previousSampleAtMicros = 0U;
   runtime.lastSampleAtMicros = 0U;
+  runtime.pendingMotionDirection = 0;
+  runtime.consecutiveMotionCount = 0U;
+  runtime.consecutiveZeroCount = 0U;
   runtime.lastError = kAnalogRpmSensorErrorNone;
   runtime.validMask = 0U;
   runtime.rawAdc = 0U;
@@ -102,9 +166,9 @@ void UpdateRuntimeData(const AnalogRpmSubSensorContext &config) {
   if (rawAdcReading < 0) {
     runtime->lastError = kAnalogRpmSensorErrorAdcReadFailed;
     runtime->sampleIntervalMicros = 0U;
-    runtime->lastRawMilliRpm = 0;
-    runtime->lastFilteredMilliRpm = 0;
-    runtime->hasFilteredRpm = false;
+    AnalogRpmMotionFilterState filterState = MakeMotionFilterState(*runtime);
+    ResetAnalogRpmMotionFilterState(filterState);
+    ApplyMotionFilterState(filterState, *runtime);
     return;
   }
 
@@ -130,9 +194,9 @@ void UpdateRuntimeData(const AnalogRpmSubSensorContext &config) {
 
   if (runtime->sampleIntervalMicros == 0U) {
     runtime->lastError = kAnalogRpmSensorErrorZeroDeltaTime;
-    runtime->lastRawMilliRpm = 0;
-    runtime->lastFilteredMilliRpm = 0;
-    runtime->hasFilteredRpm = false;
+    AnalogRpmMotionFilterState filterState = MakeMotionFilterState(*runtime);
+    ResetAnalogRpmMotionFilterState(filterState);
+    ApplyMotionFilterState(filterState, *runtime);
     runtime->previousRawAngle = runtime->rawAngle;
     runtime->previousSampleAtMicros = now;
     return;
@@ -140,20 +204,16 @@ void UpdateRuntimeData(const AnalogRpmSubSensorContext &config) {
 
   const int32_t deltaRawAngle =
       ComputeWrappedRawDelta(runtime->rawAngle, runtime->previousRawAngle);
-  if (AbsoluteValue(deltaRawAngle) <= kAnalogRpmZeroDeltaDeadbandCounts) {
-    runtime->lastRawMilliRpm = 0;
-  } else {
-    runtime->lastRawMilliRpm =
+  int32_t candidateMilliRpm = 0;
+  if (AbsoluteValue(deltaRawAngle) > GetZeroDeltaDeadbandCounts(config)) {
+    candidateMilliRpm =
         ComputeMilliRpmFromDelta(deltaRawAngle, runtime->sampleIntervalMicros);
   }
 
-  if (!runtime->hasFilteredRpm) {
-    runtime->lastFilteredMilliRpm = runtime->lastRawMilliRpm;
-    runtime->hasFilteredRpm = true;
-  } else {
-    runtime->lastFilteredMilliRpm +=
-        (runtime->lastRawMilliRpm - runtime->lastFilteredMilliRpm) / 4;
-  }
+  AnalogRpmMotionFilterState filterState = MakeMotionFilterState(*runtime);
+  UpdateAnalogRpmMotionFilter(MakeMotionFilterConfig(config), deltaRawAngle,
+                              candidateMilliRpm, filterState);
+  ApplyMotionFilterState(filterState, *runtime);
 
   if (runtime->sampleIntervalMicros > kAnalogRpmMaxSampleIntervalMicros) {
     runtime->lastError = kAnalogRpmSensorErrorSampleTooOld;

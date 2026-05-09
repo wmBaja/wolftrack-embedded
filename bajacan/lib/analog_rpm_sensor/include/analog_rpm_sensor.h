@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <analog_rpm_sensor_internal.h>
 #include <config.h>
 #include <stdint.h>
 
@@ -15,6 +16,8 @@ constexpr uint8_t kAnalogRpmAdcResolutionBits = ADC_NATIVE_RESOLUTION;
 constexpr uint16_t kAnalogRpmAdcMaxCounts =
     static_cast<uint16_t>((1UL << kAnalogRpmAdcResolutionBits) - 1UL);
 constexpr uint8_t kAnalogRpmZeroDeltaDeadbandCounts = 8U;
+constexpr uint8_t kAnalogRpmDefaultMotionConfirmSamples = 1U;
+constexpr uint8_t kAnalogRpmDefaultZeroConfirmSamples = 1U;
 constexpr uint32_t kAnalogRpmMaxSampleIntervalMicros = 25000UL;
 
 constexpr int16_t kAnalogRpmSensorErrorNone = 0;
@@ -56,9 +59,13 @@ struct AnalogRpmSensorRuntime {
   bool initialized = false;
   bool hasSample = false;
   bool hasFilteredRpm = false;
+  bool motionConfirmed = false;
   uint16_t previousRawAngle = 0U;
   uint32_t previousSampleAtMicros = 0U;
   uint32_t lastSampleAtMicros = 0U;
+  int8_t pendingMotionDirection = 0;
+  uint8_t consecutiveMotionCount = 0U;
+  uint8_t consecutiveZeroCount = 0U;
 
   int16_t lastError = kAnalogRpmSensorErrorNone;
   uint8_t validMask = 0U;
@@ -74,6 +81,9 @@ struct AnalogRpmSubSensorContext {
   SensorContext base;
   AnalogRpmSensorRuntime *runtime;
   uint8_t pin;
+  uint8_t zeroDeltaDeadbandCounts;
+  uint8_t motionConfirmSamples;
+  uint8_t zeroConfirmSamples;
 };
 
 bool AnalogRpmSensorBegin(const void *ctx);
