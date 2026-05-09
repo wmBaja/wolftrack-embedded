@@ -1,11 +1,11 @@
 #pragma once
 
-#include <analog_rpm_sensor.h>
 #include <analog_sensor.h>
 #include <as5600_sensor.h>
 #include <bno085_sensor.h>
 #include <config.h>
 #include <mlx90614_sensor.h>
+#include <pulse_rpm_sensor.h>
 #include <Wire.h>
 
 // Example hooks; set to nullptr when unused.
@@ -18,26 +18,34 @@ constexpr BoardHooks kExampleHooks{
 // Runtime objects for sensors
 
 inline MLX90614SensorRuntime gIRRuntime{&Wire1};
-inline AnalogRpmSensorRuntime gWheelSpeedRpmRuntime{};
+inline PulseRpmSensorRuntime gEngineRpmRuntime{};
 
 // Grouped sensors table; add entries as real sensors are implemented.
 
-constexpr AnalogRpmSubSensorContext kWheelSpeedRpmSensorData{
+constexpr PulseRpmSubSensorContext kEngineRpmSensorData{
     .base = {
-        .name = "Wheel Speed RPM Data",
-        .payloadSize = kAnalogRpmDataSensorPayloadSize,
+        .name = "Engine RPM Data",
+        .payloadSize = kPulseRpmDataSensorPayloadSize,
     },
-    .runtime = &gWheelSpeedRpmRuntime,
-    .pin = PIN_PD4,
+    .runtime = &gEngineRpmRuntime,
+    .pin = PIN_PF4,
+    .milliRevolutionsPerPulse = kFourStrokeEnginePulsesPerRevolution,
+    .staleAfterMicros = 300000U,
+    .minPulseSpacingMicros = 500U,
+    .countRisingEdge = true,
 };
 
-constexpr AnalogRpmSubSensorContext kWheelSpeedRpmSensorStats{
+constexpr PulseRpmSubSensorContext kEngineRpmSensorStats{
     .base = {
-        .name = "Wheel Speed RPM Stats",
-        .payloadSize = kAnalogRpmStatsSensorPayloadSize,
+        .name = "Engine RPM Stats",
+        .payloadSize = kPulseRpmStatsSensorPayloadSize,
     },
-    .runtime = &gWheelSpeedRpmRuntime,
-    .pin = PIN_PD4,
+    .runtime = &gEngineRpmRuntime,
+    .pin = PIN_PF4,
+    .milliRevolutionsPerPulse = kFourStrokeEnginePulsesPerRevolution,
+    .staleAfterMicros = 300000U,
+    .minPulseSpacingMicros = 500U,
+    .countRisingEdge = true,
 };
 
 constexpr MLX90614SensorContext kIRSensorCVT{
@@ -78,12 +86,12 @@ constexpr SensorDescriptor kIRSensorGroup[] = {
     MakeMLX90614Sensor(&kIRSensorCVT),
 };
 
-constexpr SensorDescriptor kWheelSpeedRpmDataGroup[] = {
-    MakeAnalogRpmDataSensor(&kWheelSpeedRpmSensorData),
+constexpr SensorDescriptor kEngineRpmDataGroup[] = {
+    MakePulseRpmDataSensor(&kEngineRpmSensorData),
 };
 
-constexpr SensorDescriptor kWheelSpeedRpmStatsGroup[] = {
-    MakeAnalogRpmStatsSensor(&kWheelSpeedRpmSensorStats),
+constexpr SensorDescriptor kEngineRpmStatsGroup[] = {
+    MakePulseRpmStatsSensor(&kEngineRpmSensorStats),
 };
 
 constexpr SensorDescriptor kFastGroupSensors[] = {
@@ -108,20 +116,20 @@ constexpr MessageGroupConfig kRearGroups[] = {
         .sensorCount = sizeof(kIRSensorGroup) / sizeof(kIRSensorGroup[0]),
     },
     {
-        .name = "Wheel Speed RPM Data",
+        .name = "Engine RPM Data",
         .canId = 0x102,
         .pollIntervalMs = 10,
-        .sensors = kWheelSpeedRpmDataGroup,
+        .sensors = kEngineRpmDataGroup,
         .sensorCount =
-            sizeof(kWheelSpeedRpmDataGroup) / sizeof(kWheelSpeedRpmDataGroup[0]),
+            sizeof(kEngineRpmDataGroup) / sizeof(kEngineRpmDataGroup[0]),
     },
     {
-        .name = "Wheel Speed RPM Stats",
+        .name = "Engine RPM Stats",
         .canId = 0x103,
         .pollIntervalMs = 100,
-        .sensors = kWheelSpeedRpmStatsGroup,
-        .sensorCount = sizeof(kWheelSpeedRpmStatsGroup) /
-                       sizeof(kWheelSpeedRpmStatsGroup[0]),
+        .sensors = kEngineRpmStatsGroup,
+        .sensorCount =
+            sizeof(kEngineRpmStatsGroup) / sizeof(kEngineRpmStatsGroup[0]),
     },
 };
 

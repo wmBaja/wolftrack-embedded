@@ -1,0 +1,12 @@
+{
+  "name": "pulse_rpm_sensor",
+  "version": "0.1.0",
+  "description": "Interrupt-backed pulse RPM sensor wrapper for Baja CAN",
+  "dependencies": [
+    {
+      "name": "ACAN2517FD",
+      "owner": "pierremolinaro",
+      "version": "^2.1.16"
+    }
+  ]
+}
