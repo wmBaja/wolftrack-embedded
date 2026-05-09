@@ -64,8 +64,17 @@ bool AS5600SensorBegin(const void *ctx) {
   if (driver == nullptr) {
     return false;
   }
-  if (!driver->begin(config->directionPin)) {
-    return false;
+
+  for (uint8_t attempt = 1U; attempt <= 5U; ++attempt) {
+    if (driver->begin(config->directionPin)) {
+      break;
+    }
+
+    if (attempt == 5U) {
+      return false;
+    }
+
+    delay(100);
   }
 
   driver->setDirection(config->direction);
