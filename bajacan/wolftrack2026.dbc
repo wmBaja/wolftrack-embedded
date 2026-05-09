@@ -41,10 +41,10 @@ BO_ 512 Front_FastSensors: 18 FrontNode
  SG_ SteeringAngle_agc : 48|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ SteeringAngle_status : 56|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ SteeringAngle_error : 64|16@1- (1,0) [-32768|32767] "" Vector__XXX
- SG_ FrontBrakePressure_raw : 87|16@0+ (1,0) [0|65535] "" Vector__XXX
- SG_ RearBrakePressure_raw : 103|16@0+ (1,0) [0|65535] "" Vector__XXX
- SG_ FLSuspension_raw : 119|16@0+ (1,0) [0|65535] "" Vector__XXX
- SG_ FRSuspension_raw : 135|16@0+ (1,0) [0|65535] "" Vector__XXX
+ SG_ FrontBrakePressure_raw : 87|16@0+ (1,0) [0|4095] "" Vector__XXX
+ SG_ RearBrakePressure_raw : 103|16@0+ (1,0) [0|4095] "" Vector__XXX
+ SG_ FLSuspension_raw : 119|16@0+ (1,0) [0|4095] "" Vector__XXX
+ SG_ FRSuspension_raw : 135|16@0+ (1,0) [0|4095] "" Vector__XXX
 
 BO_ 513 Front_IMU_Data: 54 FrontNode
  SG_ IMU_Data_version : 0|8@1+ (1,0) [0|255] "" Vector__XXX
@@ -74,20 +74,34 @@ BO_ 514 Front_IMU_Stats: 12 FrontNode
  SG_ IMU_Stats_rotation_acc_rad : 64|32@1- (1,0) [0|0] "rad" Vector__XXX
 
 BO_ 256 Rear_FastSensors: 6 RearNode
- SG_ RLSuspension_raw : 7|16@0+ (1,0) [0|65535] "" Vector__XXX
- SG_ RRSuspension_raw : 23|16@0+ (1,0) [0|65535] "" Vector__XXX
- SG_ ThrottlePos_raw : 39|16@0+ (1,0) [0|65535] "" Vector__XXX
+ SG_ RLSuspension_raw : 7|16@0+ (1,0) [0|4095] "" Vector__XXX
+ SG_ RRSuspension_raw : 23|16@0+ (1,0) [0|4095] "" Vector__XXX
+ SG_ ThrottlePos_raw : 39|16@0+ (1,0) [0|4095] "" Vector__XXX
 
 BO_ 257 Rear_IRCVTTemp: 14 RearNode
  SG_ IRCVTTemp_version : 0|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ IRCVTTemp_validMask : 8|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ IRCVTTemp_ambientCentiDegrees : 16|32@1- (1,0) [-2147483648|2147483647] "cdeg" Vector__XXX
  SG_ IRCVTTemp_objectCentiDegrees : 48|32@1- (1,0) [-2147483648|2147483647] "cdeg" Vector__XXX
- SG_ IRCVTTemp_emissivityTenThousandths : 80|16@1+ (1,0) [0|65535] "" Vector__XXX
+ SG_ IRCVTTemp_emissivityTenThousandths : 80|16@1+ (1,0) [0|10000] "" Vector__XXX
  SG_ IRCVTTemp_error : 96|16@1- (1,0) [-32768|32767] "" Vector__XXX
 
-BO_ 258 Rear_WheelSpeedRaw: 2 RearNode
- SG_ WheelSpeed_raw : 7|16@0+ (1,0) [0|65535] "" Vector__XXX
+BO_ 258 Rear_WheelSpeedRpmData: 8 RearNode
+ SG_ WheelSpeedRpmData_version : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ WheelSpeedRpmData_validMask : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ WheelSpeedRpmData_error : 16|16@1- (1,0) [-32768|32767] "" Vector__XXX
+ SG_ WheelSpeedRpmData_milliRpm : 32|32@1- (1,0) [-2147483648|2147483647] "milli_rpm" Vector__XXX
+
+BO_ 259 Rear_WheelSpeedRpmStats: 22 RearNode
+ SG_ WheelSpeedRpmStats_version : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ WheelSpeedRpmStats_validMask : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ WheelSpeedRpmStats_rawAdc : 16|16@1+ (1,0) [0|4095] "" Vector__XXX
+ SG_ WheelSpeedRpmStats_rawAngle : 32|16@1+ (1,0) [0|4095] "" Vector__XXX
+ SG_ WheelSpeedRpmStats_angleCentiDegrees : 48|16@1+ (1,0) [0|35999] "cdeg" Vector__XXX
+ SG_ WheelSpeedRpmStats_sampleIntervalMicros : 64|32@1+ (1,0) [0|4294967295] "us" Vector__XXX
+ SG_ WheelSpeedRpmStats_rawMilliRpm : 96|32@1- (1,0) [-2147483648|2147483647] "milli_rpm" Vector__XXX
+ SG_ WheelSpeedRpmStats_filteredMilliRpm : 128|32@1- (1,0) [-2147483648|2147483647] "milli_rpm" Vector__XXX
+ SG_ WheelSpeedRpmStats_error : 160|16@1- (1,0) [-32768|32767] "" Vector__XXX
 
 SIG_VALTYPE_ 513 IMU_Data_accel_x : 1;
 SIG_VALTYPE_ 513 IMU_Data_accel_y : 1;

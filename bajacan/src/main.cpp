@@ -7,6 +7,7 @@
 
 #include "config.h"        // Common contracts for board configs
 #include "debug_print.h"
+#include <analog_rpm_sensor.h>
 #include <analog_sensor.h>
 #include <as5600_sensor.h>
 #include <bno085_sensor.h>
@@ -43,6 +44,13 @@ void CallIfSet(void (*hook)()) {
   if (hook != nullptr) {
     hook();
   }
+}
+
+void ConfigureSharedAdc() {
+  // All repo analog readers use ADC0 with VDD as the voltage reference on
+  // this AVR DB board family.
+  VREF.ADC0REF = VREF_REFSEL_VDD_gc;
+  analogReadResolution(12);
 }
 
 const SensorContext *GetSensorContext(const SensorDescriptor &desc) {
@@ -337,6 +345,7 @@ void WakeIfRequested() {
   WakeCanDriver(gCanDriver, kBoardConfig);
   gNodeState = NodeState::Awake;
 
+  ConfigureSharedAdc();
   ResumeSensorsAfterWake();
   CallIfSet(kBoardConfig.hooks.afterWake);
 }
@@ -345,6 +354,7 @@ void WakeIfRequested() {
 
 void setup() {
   CallIfSet(kBoardConfig.hooks.preSetup);
+  ConfigureSharedAdc();
 
   pinMode(kBoardConfig.canCsPin, OUTPUT);
   pinMode(kBoardConfig.canIntPin, INPUT_PULLUP);

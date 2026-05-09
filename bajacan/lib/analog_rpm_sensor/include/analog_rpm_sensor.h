@@ -14,7 +14,6 @@ constexpr uint16_t kAnalogRpmCentiDegreesPerRevolution = 36000U;
 constexpr uint8_t kAnalogRpmAdcResolutionBits = ADC_NATIVE_RESOLUTION;
 constexpr uint16_t kAnalogRpmAdcMaxCounts =
     static_cast<uint16_t>((1UL << kAnalogRpmAdcResolutionBits) - 1UL);
-constexpr uint8_t kAnalogRpmAdcSampleDuration = 255U;
 constexpr uint8_t kAnalogRpmZeroDeltaDeadbandCounts = 8U;
 constexpr uint32_t kAnalogRpmMaxSampleIntervalMicros = 25000UL;
 

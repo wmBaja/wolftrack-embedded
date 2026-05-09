@@ -1,5 +1,6 @@
 #pragma once
 
+#include <analog_rpm_sensor.h>
 #include <analog_sensor.h>
 #include <as5600_sensor.h>
 #include <bno085_sensor.h>
@@ -17,14 +18,25 @@ constexpr BoardHooks kExampleHooks{
 // Runtime objects for sensors
 
 inline MLX90614SensorRuntime gIRRuntime{&Wire1};
+inline AnalogRpmSensorRuntime gWheelSpeedRpmRuntime{};
 
 // Grouped sensors table; add entries as real sensors are implemented.
 
-constexpr AnalogSensorContext kWheelSpeedRawSensor{
+constexpr AnalogRpmSubSensorContext kWheelSpeedRpmSensorData{
     .base = {
-        .name = "Wheel Speed Raw",
-        .payloadSize = kAnalogSensorPayloadSize,
+        .name = "Wheel Speed RPM Data",
+        .payloadSize = kAnalogRpmDataSensorPayloadSize,
     },
+    .runtime = &gWheelSpeedRpmRuntime,
+    .pin = PIN_PD4,
+};
+
+constexpr AnalogRpmSubSensorContext kWheelSpeedRpmSensorStats{
+    .base = {
+        .name = "Wheel Speed RPM Stats",
+        .payloadSize = kAnalogRpmStatsSensorPayloadSize,
+    },
+    .runtime = &gWheelSpeedRpmRuntime,
     .pin = PIN_PD4,
 };
 
@@ -66,8 +78,12 @@ constexpr SensorDescriptor kIRSensorGroup[] = {
     MakeMLX90614Sensor(&kIRSensorCVT),
 };
 
-constexpr SensorDescriptor kWheelSpeedRawGroup[] = {
-    MakeAnalogSensor(&kWheelSpeedRawSensor),
+constexpr SensorDescriptor kWheelSpeedRpmDataGroup[] = {
+    MakeAnalogRpmDataSensor(&kWheelSpeedRpmSensorData),
+};
+
+constexpr SensorDescriptor kWheelSpeedRpmStatsGroup[] = {
+    MakeAnalogRpmStatsSensor(&kWheelSpeedRpmSensorStats),
 };
 
 constexpr SensorDescriptor kFastGroupSensors[] = {
@@ -92,11 +108,20 @@ constexpr MessageGroupConfig kRearGroups[] = {
         .sensorCount = sizeof(kIRSensorGroup) / sizeof(kIRSensorGroup[0]),
     },
     {
-        .name = "Wheel Speed Raw",
+        .name = "Wheel Speed RPM Data",
         .canId = 0x102,
         .pollIntervalMs = 10,
-        .sensors = kWheelSpeedRawGroup,
-        .sensorCount = sizeof(kWheelSpeedRawGroup) / sizeof(kWheelSpeedRawGroup[0]),
+        .sensors = kWheelSpeedRpmDataGroup,
+        .sensorCount =
+            sizeof(kWheelSpeedRpmDataGroup) / sizeof(kWheelSpeedRpmDataGroup[0]),
+    },
+    {
+        .name = "Wheel Speed RPM Stats",
+        .canId = 0x103,
+        .pollIntervalMs = 100,
+        .sensors = kWheelSpeedRpmStatsGroup,
+        .sensorCount = sizeof(kWheelSpeedRpmStatsGroup) /
+                       sizeof(kWheelSpeedRpmStatsGroup[0]),
     },
 };
 

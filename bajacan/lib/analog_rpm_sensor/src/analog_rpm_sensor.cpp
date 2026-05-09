@@ -10,23 +10,8 @@ const AnalogRpmSubSensorContext *GetAnalogRpmContext(const void *ctx) {
 }
 
 int32_t ReadSettledAdc(const uint8_t pin) {
-  const uint8_t previousReference = getAnalogReference();
-  const uint8_t previousResolution =
-      static_cast<uint8_t>(getAnalogReadResolution());
-  const uint8_t previousSampleDuration = getAnalogSampleDuration();
-
-  analogReference(VDD);
-  analogReadResolution(kAnalogRpmAdcResolutionBits);
-  analogSampleDuration(kAnalogRpmAdcSampleDuration);
-
-  // Read the AS5600 as a direct 0-5 V to 0-4095 conversion. The first sample
-  // is discarded so the ADC mux/sample capacitor can settle on PD4.
-  const int16_t firstReading = analogRead(pin);
-  const int16_t secondReading = analogRead(pin);
-
-  analogSampleDuration(previousSampleDuration);
-  analogReadResolution(previousResolution);
-  analogReference(previousReference);
+  const int32_t firstReading = analogRead(pin);
+  const int32_t secondReading = analogRead(pin);
 
   if (secondReading >= 0) {
     return secondReading;
