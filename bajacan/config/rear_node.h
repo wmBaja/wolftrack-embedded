@@ -17,7 +17,7 @@ constexpr BoardHooks kExampleHooks{
 
 // Runtime objects for sensors
 
-inline MLX90614SensorRuntime gIRRuntime{&Wire1};
+inline MLX90614SensorRuntime gIRRuntime{&Wire1, PIN_WIRE1_SDA, PIN_WIRE1_SCL};
 inline AnalogRpmSensorRuntime gWheelSpeedRpmRuntime{};
 
 // Grouped sensors table; add entries as real sensors are implemented.
@@ -47,7 +47,7 @@ constexpr MLX90614SensorContext kIRSensorCVT{
     },
     .runtime = &gIRRuntime,
     .i2cAddress = MLX90614_I2CADDR,
-    .clockHz = 100000,
+    .clockHz = 115000,
 };
 
 constexpr AnalogSensorContext kRLSuspensionSensor{
