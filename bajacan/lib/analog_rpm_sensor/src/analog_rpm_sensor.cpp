@@ -64,6 +64,15 @@ int32_t ReadSettledAdc(const uint8_t pin) {
   }
 
   SortAscending(validSamples, validCount);
+
+  // If the spread of back-to-back samples is very large (>1024 counts), 
+  // we are caught in the middle of a wraparound slew transition.
+  // A median filter would actively select the worst mid-slew artifact.
+  // Instead, bypass the slew by returning the boundary value.
+  if (validCount > 1U && (validSamples[validCount - 1U] - validSamples[0]) > 1024) {
+    return validSamples[0];
+  }
+
   return validSamples[validCount / 2U];
 }
 
@@ -150,6 +159,9 @@ void ResetRuntime(AnalogRpmSensorRuntime &runtime) {
   runtime.sampleIntervalMicros = 0U;
   runtime.lastRawMilliRpm = 0;
   runtime.lastFilteredMilliRpm = 0;
+  runtime.consecutiveRejectedSamples = 0U;
+  runtime.accumulatedDeltaRawAngle = 0;
+  runtime.accumulatedDeltaMicros = 0U;
 }
 
 void UpdateRuntimeData(const AnalogRpmSubSensorContext &config) {
@@ -158,8 +170,9 @@ void UpdateRuntimeData(const AnalogRpmSubSensorContext &config) {
     return;
   }
 
+  const uint32_t now = micros(); // Capture before ADC to reduce jitter
   const int32_t rawAdcReading = ReadSettledAdc(config.pin);
-  const uint32_t now = micros();
+
   runtime->lastError = kAnalogRpmSensorErrorNone;
   runtime->validMask = 0U;
 
@@ -186,6 +199,9 @@ void UpdateRuntimeData(const AnalogRpmSubSensorContext &config) {
     runtime->lastRawMilliRpm = 0;
     runtime->lastFilteredMilliRpm = 0;
     runtime->hasFilteredRpm = false;
+    runtime->consecutiveRejectedSamples = 0U;
+    runtime->accumulatedDeltaRawAngle = 0;
+    runtime->accumulatedDeltaMicros = 0U;
     return;
   }
 
@@ -204,24 +220,63 @@ void UpdateRuntimeData(const AnalogRpmSubSensorContext &config) {
 
   const int32_t deltaRawAngle =
       ComputeWrappedRawDelta(runtime->rawAngle, runtime->previousRawAngle);
+
+  // Outlier rejection (Wraparound slew artifact filter)
+  if (runtime->hasFilteredRpm) {
+    // Calculate what the delta SHOULD be based on the current filtered RPM
+    int64_t expected_delta = (static_cast<int64_t>(runtime->lastFilteredMilliRpm) * 
+                              kAnalogRpmCountsPerRevolution * 
+                              runtime->sampleIntervalMicros) / 60000000000LL;
+    
+    int64_t delta_error = static_cast<int64_t>(deltaRawAngle) - expected_delta;
+    
+    // If the actual delta deviates massively from the expected physical delta (e.g. > 90 degrees)
+    if (AbsoluteValue(static_cast<int32_t>(delta_error)) > 1024) {
+      if (runtime->consecutiveRejectedSamples < 3U) {
+        runtime->consecutiveRejectedSamples++;
+        runtime->lastError = kAnalogRpmSensorErrorAdcReadFailed;
+        // Do NOT update previousRawAngle or previousSampleAtMicros to bridge over the artifact
+        return;
+      }
+    }
+  }
+  runtime->consecutiveRejectedSamples = 0U;
+
+  // Always update previous states for the next raw delta calculation
+  runtime->previousRawAngle = runtime->rawAngle;
+  runtime->previousSampleAtMicros = now;
+
+  // Accumulate delta and time to prevent starvation at low speeds
+  runtime->accumulatedDeltaRawAngle += deltaRawAngle;
+  runtime->accumulatedDeltaMicros += runtime->sampleIntervalMicros;
+
   int32_t candidateMilliRpm = 0;
-  if (AbsoluteValue(deltaRawAngle) > GetZeroDeltaDeadbandCounts(config)) {
-    candidateMilliRpm =
-        ComputeMilliRpmFromDelta(deltaRawAngle, runtime->sampleIntervalMicros);
+  bool processFilter = false;
+
+  if (AbsoluteValue(runtime->accumulatedDeltaRawAngle) > GetZeroDeltaDeadbandCounts(config)) {
+    candidateMilliRpm = ComputeMilliRpmFromDelta(runtime->accumulatedDeltaRawAngle, runtime->accumulatedDeltaMicros);
+    processFilter = true;
+  } else if (runtime->accumulatedDeltaMicros > 100000UL) { 
+    // 100ms timeout for zero speed
+    candidateMilliRpm = 0;
+    processFilter = true;
   }
 
-  AnalogRpmMotionFilterState filterState = MakeMotionFilterState(*runtime);
-  UpdateAnalogRpmMotionFilter(MakeMotionFilterConfig(config), deltaRawAngle,
-                              candidateMilliRpm, filterState);
-  ApplyMotionFilterState(filterState, *runtime);
+  if (processFilter) {
+    AnalogRpmMotionFilterState filterState = MakeMotionFilterState(*runtime);
+    UpdateAnalogRpmMotionFilter(MakeMotionFilterConfig(config), runtime->accumulatedDeltaRawAngle,
+                                candidateMilliRpm, filterState);
+    ApplyMotionFilterState(filterState, *runtime);
+
+    runtime->accumulatedDeltaRawAngle = 0;
+    runtime->accumulatedDeltaMicros = 0U;
+  }
 
   if (runtime->sampleIntervalMicros > kAnalogRpmMaxSampleIntervalMicros) {
     runtime->lastError = kAnalogRpmSensorErrorSampleTooOld;
   }
 
   runtime->validMask = kAnalogRpmSampleValidAngle | kAnalogRpmSampleValidRpm;
-  runtime->previousRawAngle = runtime->rawAngle;
-  runtime->previousSampleAtMicros = now;
 }
 
 void CopyDataFrame(const AnalogRpmSensorRuntime &runtime,

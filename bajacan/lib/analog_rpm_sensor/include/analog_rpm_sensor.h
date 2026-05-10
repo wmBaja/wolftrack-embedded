@@ -1,9 +1,9 @@
 #pragma once
 
 #include <Arduino.h>
-#include <analog_rpm_sensor_internal.h>
 #include <config.h>
 #include <stdint.h>
+#include <analog_rpm_sensor_internal.h>
 
 constexpr uint8_t kAnalogRpmSampleFrameVersion = 1U;
 
@@ -75,6 +75,9 @@ struct AnalogRpmSensorRuntime {
   uint32_t sampleIntervalMicros = 0U;
   int32_t lastRawMilliRpm = 0;
   int32_t lastFilteredMilliRpm = 0;
+  uint8_t consecutiveRejectedSamples = 0U;
+  int32_t accumulatedDeltaRawAngle = 0;
+  uint32_t accumulatedDeltaMicros = 0U;
 };
 
 struct AnalogRpmSubSensorContext {
