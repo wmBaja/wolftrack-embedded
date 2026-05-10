@@ -6,25 +6,42 @@
 
 namespace {
 
-const AS5600SensorContext *GetAS5600Context(const void *ctx) {
-  return static_cast<const AS5600SensorContext *>(ctx);
+struct AS5600Capture {
+  uint16_t rawAngle = 0U;
+  int16_t angleDegrees = 0;
+  uint16_t magnitude = 0U;
+  uint8_t agc = 0U;
+  uint8_t status = 0U;
+  int16_t error = 0;
+  uint8_t validMask = 0U;
+};
+
+const AS5600SubSensorContext *GetAS5600Context(const void *ctx) {
+  return static_cast<const AS5600SubSensorContext *>(ctx);
 }
 
-AS5600 *GetDriver(const AS5600SensorContext &config) {
+AS5600 *GetDriver(const AS5600SubSensorContext &config) {
   if (config.runtime == nullptr) {
     return nullptr;
   }
   return &config.runtime->driver;
 }
 
-TwoWire *GetWire(const AS5600SensorContext &config) {
+TwoWire *GetWire(const AS5600SubSensorContext &config) {
   if (config.runtime == nullptr) {
     return nullptr;
   }
   return config.runtime->wire;
 }
 
-void CopySampleToFrame(const AS5600SampleFrame &sample, CANFDMessage &outFrame) {
+void CopyDataFrameToCan(const AS5600DataSampleFrame &sample,
+                        CANFDMessage &outFrame) {
+  outFrame.len = sizeof(sample);
+  memcpy(outFrame.data, &sample, sizeof(sample));
+}
+
+void CopyStatsFrameToCan(const AS5600StatsSampleFrame &sample,
+                         CANFDMessage &outFrame) {
   outFrame.len = sizeof(sample);
   memcpy(outFrame.data, &sample, sizeof(sample));
 }
@@ -50,10 +67,62 @@ int16_t MapAngleToCenteredCentiDegrees(const uint16_t angle,
   return static_cast<int16_t>(centered);
 }
 
+bool CaptureAs5600Sample(const AS5600SubSensorContext &config,
+                         AS5600Capture &sample) {
+  AS5600 *driver = GetDriver(config);
+  if (driver == nullptr) {
+    return false;
+  }
+
+  if (!config.runtime->initialized) {
+    sample.error = kAS5600SensorErrorNotInitialized;
+    return true;
+  }
+
+  sample.rawAngle = driver->rawAngle();
+  if (CaptureLastError(*driver, sample.error)) {
+    return true;
+  }
+
+  uint16_t angleForMapping = sample.rawAngle;
+  if (config.angleMapping == AS5600AngleMapping::CenteredWindow) {
+    angleForMapping = driver->readAngle();
+    if (CaptureLastError(*driver, sample.error)) {
+      return true;
+    }
+  }
+
+  if (config.angleMapping == AS5600AngleMapping::CenteredWindow) {
+    sample.angleDegrees = MapAngleToCenteredCentiDegrees(
+        angleForMapping, config.maxMappedAngleCentiDegrees);
+  } else {
+    sample.angleDegrees = static_cast<int16_t>(
+        AS5600RawAngleToCentiDegrees(sample.rawAngle));
+  }
+
+  sample.status = driver->readStatus();
+  if (CaptureLastError(*driver, sample.error)) {
+    return true;
+  }
+
+  sample.agc = driver->readAGC();
+  if (CaptureLastError(*driver, sample.error)) {
+    return true;
+  }
+
+  sample.magnitude = driver->readMagnitude();
+  if (CaptureLastError(*driver, sample.error)) {
+    return true;
+  }
+
+  sample.validMask |= kAS5600SampleValidMagnet;
+  return true;
+}
+
 }  // namespace
 
 bool AS5600SensorBegin(const void *ctx) {
-  const AS5600SensorContext *config = GetAS5600Context(ctx);
+  const AS5600SubSensorContext *config = GetAS5600Context(ctx);
   if (config == nullptr || config->runtime == nullptr) {
     return false;
   }
@@ -107,54 +176,44 @@ bool AS5600SensorBegin(const void *ctx) {
   return true;
 }
 
-bool AS5600SensorSample(const void *ctx, CANFDMessage &outFrame) {
-  const AS5600SensorContext *config = GetAS5600Context(ctx);
+bool AS5600DataSensorSample(const void *ctx, CANFDMessage &outFrame) {
+  const AS5600SubSensorContext *config = GetAS5600Context(ctx);
   if (config == nullptr || config->runtime == nullptr) {
     return false;
   }
 
-  AS5600SampleFrame sample = {};
-  AS5600 *driver = GetDriver(*config);
-  if (driver == nullptr) {
+  AS5600Capture capture = {};
+  if (!CaptureAs5600Sample(*config, capture)) {
     return false;
   }
 
-  if (!config->runtime->initialized) {
-    sample.error = kAS5600SensorErrorNotInitialized;
-    CopySampleToFrame(sample, outFrame);
-    return true;
+  AS5600DataSampleFrame sample = {
+      .angleDegrees = capture.angleDegrees,
+  };
+  CopyDataFrameToCan(sample, outFrame);
+  return true;
+}
+
+bool AS5600StatsSensorSample(const void *ctx, CANFDMessage &outFrame) {
+  const AS5600SubSensorContext *config = GetAS5600Context(ctx);
+  if (config == nullptr || config->runtime == nullptr) {
+    return false;
   }
 
-  sample.rawAngle = driver->rawAngle();
-  if (!CaptureLastError(*driver, sample.error)) {
-    uint16_t angleForMapping = sample.rawAngle;
-    if (config->angleMapping == AS5600AngleMapping::CenteredWindow) {
-      angleForMapping = driver->readAngle();
-      if (!CaptureLastError(*driver, sample.error)) {
-        sample.angleCentiDegrees = MapAngleToCenteredCentiDegrees(
-            angleForMapping, config->maxMappedAngleCentiDegrees);
-      }
-    } else {
-      sample.angleCentiDegrees = static_cast<int16_t>(
-          AS5600RawAngleToCentiDegrees(sample.rawAngle));
-    }
-
-    if (sample.error == AS5600_OK) {
-      sample.status = driver->readStatus();
-      CaptureLastError(*driver, sample.error);
-    }
+  AS5600Capture capture = {};
+  if (!CaptureAs5600Sample(*config, capture)) {
+    return false;
   }
 
-  if (sample.error == AS5600_OK) {
-    sample.agc = driver->readAGC();
-    CaptureLastError(*driver, sample.error);
-  }
-
-  if (sample.error == AS5600_OK) {
-    sample.magnitude = driver->readMagnitude();
-    CaptureLastError(*driver, sample.error);
-  }
-
-  CopySampleToFrame(sample, outFrame);
+  AS5600StatsSampleFrame sample = {
+      .version = kAS5600SampleFrameVersion,
+      .validMask = capture.validMask,
+      .rawAngle = capture.rawAngle,
+      .magnitude = capture.magnitude,
+      .agc = capture.agc,
+      .status = capture.status,
+      .error = capture.error,
+  };
+  CopyStatsFrameToCan(sample, outFrame);
   return true;
 }

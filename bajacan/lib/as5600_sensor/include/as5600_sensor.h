@@ -27,19 +27,32 @@ constexpr uint16_t AS5600RawAngleToCentiDegrees(const uint16_t rawAngle) {
       kAS5600CountsPerRevolution);
 }
 
-struct __attribute__((packed)) AS5600SampleFrame {
+constexpr uint8_t kAS5600SampleFrameVersion = 1U;
+
+constexpr uint8_t kAS5600SampleValidMagnet = 0x02U;
+
+struct __attribute__((packed)) AS5600DataSampleFrame {
+  int16_t angleDegrees;
+};
+
+struct __attribute__((packed)) AS5600StatsSampleFrame {
+  uint8_t version;
+  uint8_t validMask;
   uint16_t rawAngle;
-  int16_t angleCentiDegrees;
   uint16_t magnitude;
   uint8_t agc;
   uint8_t status;
   int16_t error;
 };
 
-static_assert(sizeof(AS5600SampleFrame) <= 64,
-              "AS5600 sample frame must fit in one CAN FD payload");
-constexpr uint8_t kAS5600SensorPayloadSize =
-    static_cast<uint8_t>(sizeof(AS5600SampleFrame));
+static_assert(sizeof(AS5600DataSampleFrame) <= 64,
+              "AS5600 data frame must fit in one CAN FD payload");
+static_assert(sizeof(AS5600StatsSampleFrame) <= 64,
+              "AS5600 stats frame must fit in one CAN FD payload");
+constexpr uint8_t kAS5600DataSensorPayloadSize =
+    static_cast<uint8_t>(sizeof(AS5600DataSampleFrame));
+constexpr uint8_t kAS5600StatsSensorPayloadSize =
+    static_cast<uint8_t>(sizeof(AS5600StatsSampleFrame));
 
 struct AS5600SensorRuntime {
   explicit AS5600SensorRuntime(TwoWire *wireBus = &Wire)
@@ -50,7 +63,7 @@ struct AS5600SensorRuntime {
   bool initialized = false;
 };
 
-struct AS5600SensorContext {
+struct AS5600SubSensorContext {
   SensorContext base;
   AS5600SensorRuntime *runtime;
   uint32_t clockHz;
@@ -65,13 +78,26 @@ struct AS5600SensorContext {
 };
 
 bool AS5600SensorBegin(const void *ctx);
-bool AS5600SensorSample(const void *ctx, CANFDMessage &outFrame);
+bool AS5600DataSensorSample(const void *ctx, CANFDMessage &outFrame);
+bool AS5600StatsSensorSample(const void *ctx, CANFDMessage &outFrame);
 
-constexpr SensorDescriptor MakeAS5600Sensor(const AS5600SensorContext *ctx) {
+constexpr SensorDescriptor MakeAS5600DataSensor(
+    const AS5600SubSensorContext *ctx) {
   return SensorDescriptor{
       .context = ctx,
       .begin = AS5600SensorBegin,
-      .sample = AS5600SensorSample,
+      .sample = AS5600DataSensorSample,
+      .suspend = nullptr,
+      .resume = nullptr,
+  };
+}
+
+constexpr SensorDescriptor MakeAS5600StatsSensor(
+    const AS5600SubSensorContext *ctx) {
+  return SensorDescriptor{
+      .context = ctx,
+      .begin = AS5600SensorBegin,
+      .sample = AS5600StatsSensorSample,
       .suspend = nullptr,
       .resume = nullptr,
   };
