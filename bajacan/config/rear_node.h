@@ -57,8 +57,8 @@ constexpr PulseRpmSubSensorContext kEngineRpmSensorData{
     .pin = PIN_PF4,
     .milliRevolutionsPerPulse = kFourStrokeEnginePulsesPerRevolution,
     .staleAfterMicros = 300000U,
-    .minPulseSpacingMicros = 500U,
-    .countRisingEdge = true,
+    .minPulseSpacingMicros = 5000U,
+    .countRisingEdge = false,
 };
 
 constexpr PulseRpmSubSensorContext kEngineRpmSensorStats{
@@ -70,8 +70,8 @@ constexpr PulseRpmSubSensorContext kEngineRpmSensorStats{
     .pin = PIN_PF4,
     .milliRevolutionsPerPulse = kFourStrokeEnginePulsesPerRevolution,
     .staleAfterMicros = 300000U,
-    .minPulseSpacingMicros = 500U,
-    .countRisingEdge = true,
+    .minPulseSpacingMicros = 5000U,
+    .countRisingEdge = false,
 };
 
 constexpr MLX90614SensorContext kIRSensorCVT{

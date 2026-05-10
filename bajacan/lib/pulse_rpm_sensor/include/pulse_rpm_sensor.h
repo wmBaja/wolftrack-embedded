@@ -4,7 +4,7 @@
 #include <config.h>
 #include <stdint.h>
 
-constexpr uint8_t kPulseRpmSampleFrameVersion = 2U;
+constexpr uint8_t kPulseRpmSampleFrameVersion = 1U;
 
 constexpr uint8_t kPulseRpmSampleValidTiming = 0x01U;
 constexpr uint8_t kPulseRpmSampleValidRpm = 0x02U;
@@ -35,8 +35,6 @@ struct __attribute__((packed)) PulseRpmStatsSampleFrame {
   uint8_t version;
   uint8_t validMask;
   uint32_t pulseIntervalMicros;
-  uint32_t averagedPulseIntervalMicros;
-  uint32_t pendingOutlierIntervalMicros;
   uint32_t sampleAgeMicros;
   uint32_t acceptedPulseCount;
   uint32_t rejectedPulseCount;
@@ -64,15 +62,13 @@ struct PulseRpmSensorRuntime {
   volatile uint32_t isrRejectedPulseCount = 0U;
 
   uint32_t lastProcessedAcceptedPulseCount = 0U;
-  uint32_t filterRejectedPulseCount = 0U;
+  uint32_t lastValidPulseIntervalMicros = 0U;
+  uint32_t missedPulseRecoveryCount = 0U;
   uint32_t acceptedPulseIntervals[kPulseRpmIntervalAverageWindow] = {0U};
   uint32_t acceptedPulseIntervalSum = 0U;
-  uint32_t averagedPulseIntervalMicros = 0U;
-  uint32_t pendingOutlierIntervalMicros = 0U;
   uint8_t acceptedPulseIntervalHead = 0U;
   uint8_t acceptedPulseIntervalCount = 0U;
   bool hasValidInterval = false;
-  bool hasPendingOutlier = false;
   uint8_t validMask = 0U;
   uint32_t pulseIntervalMicros = 0U;
   uint32_t sampleAgeMicros = 0U;
