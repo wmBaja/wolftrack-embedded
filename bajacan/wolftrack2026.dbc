@@ -36,7 +36,7 @@ BU_: FrontNode RearNode
 
 BO_ 512 Front_FastSensors: 18 FrontNode
  SG_ SteeringAngle_rawAngle : 0|16@1+ (1,0) [0|4095] "" Vector__XXX
- SG_ SteeringAngle_angleCentiDegrees : 16|16@1+ (1,0) [0|35999] "cdeg" Vector__XXX
+ SG_ SteeringAngle_angleCentiDegrees : 16|16@1- (1,0) [-10227|10227] "cdeg" Vector__XXX
  SG_ SteeringAngle_magnitude : 32|16@1+ (1,0) [0|65535] "" Vector__XXX
  SG_ SteeringAngle_agc : 48|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ SteeringAngle_status : 56|8@1+ (1,0) [0|255] "" Vector__XXX
