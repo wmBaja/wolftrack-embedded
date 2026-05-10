@@ -70,6 +70,7 @@ struct BoardConfig {
   uint32_t arbitrationBitrate;
   DataBitRateFactor dataBitrateFactor;
   bool useExtendedIds;
+  uint16_t startupDelayMs;
   ControlMessageConfig control;
   BoardHooks hooks;
   const MessageGroupConfig *groups;
@@ -87,3 +88,4 @@ constexpr uint32_t kDefaultArbitrationBitrate = 500'000UL;  // 500 kbps
 constexpr DataBitRateFactor kDefaultDataBitrateFactor =
     DataBitRateFactor::x2;  // 1 Mbps data with 500 kbps arb
 constexpr bool kDefaultUseExtendedIds = true;
+constexpr uint16_t kDefaultStartupDelayMs = 1000U;

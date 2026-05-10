@@ -203,6 +203,7 @@ constexpr BoardConfig kBoardConfig{
     kDefaultArbitrationBitrate,
     kDefaultDataBitrateFactor,
     kDefaultUseExtendedIds,
+    kDefaultStartupDelayMs,
     kDefaultControlCommands,
     kExampleHooks,
     kRearGroups,
