@@ -15,6 +15,7 @@
 // Force PlatformIO LDF to discover drivers referenced only by board configs.
 #include <i2c_sensor.h>
 #include <mlx90614_sensor.h>
+#include <pulse_rpm_sensor.h>
 #include <sensors_config.h>  // Provided by the selected board environment
 
 namespace {
