@@ -35,7 +35,7 @@ BS_:
 BU_: FrontNode RearNode
 
 BO_ 512 SteeringAngleData: 2 FrontNode
- SG_ SteeringAngleData_angleDegrees : 0|16@1- (0.01,0) [-110|110] "deg" Vector__XXX
+ SG_ SteeringAngleData_angleDegrees : 0|16@1- (0.01,0) [-102.27|102.27] "deg" Vector__XXX
 
 BO_ 513 SteeringAngleStats: 10 FrontNode
  SG_ SteeringAngleStats_version : 0|8@1+ (1,0) [0|255] "" Vector__XXX
@@ -93,11 +93,11 @@ BO_ 258 IRCVTTempData: 8 RearNode
 BO_ 259 IRCVTTempStats: 6 RearNode
  SG_ IRCVTTempStats_version : 0|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ IRCVTTempStats_validMask : 8|8@1+ (1,0) [0|255] "" Vector__XXX
- SG_ IRCVTTempStats_emissivity : 16|16@1+ (0.0001,0) [0|1] "" Vector__XXX
+ SG_ IRCVTTempStats_emissivityTenThousandths : 16|16@1+ (1,0) [0|10000] "" Vector__XXX
  SG_ IRCVTTempStats_error : 32|16@1- (1,0) [-32768|32767] "" Vector__XXX
 
 BO_ 260 RPMData: 8 RearNode
- SG_ WheelSpeedRpmData_rpm : 0|32@1- (0.001,0) [-2147483.648|2147483.647] "rpm" Vector__XXX
+ SG_ WheelSpeedRpmData_rpm : 0|32@1- (0.000333,0) [-2147483.648|2147483.647] "rpm" Vector__XXX
  SG_ EngineRpmData_rpm : 32|32@1- (0.001,0) [-2147483.648|2147483.647] "rpm" Vector__XXX
 
 BO_ 261 RPMStats: 34 RearNode
@@ -106,14 +106,14 @@ BO_ 261 RPMStats: 34 RearNode
  SG_ WheelSpeedRpmStats_rawAdc : 16|16@1+ (1,0) [0|4095] "" Vector__XXX
  SG_ WheelSpeedRpmStats_rawAngle : 32|16@1+ (1,0) [0|4095] "" Vector__XXX
  SG_ WheelSpeedRpmStats_angleDegrees : 48|16@1+ (0.01,0) [0|359.99] "deg" Vector__XXX
- SG_ WheelSpeedStats_sampleIntervalUs : 64|32@1+ (1,0) [0|4294967295] "us" Vector__XXX
+ SG_ WheelSpeedRpmStats_sampleIntervalMicros : 64|32@1+ (1,0) [0|4294967295] "us" Vector__XXX
  SG_ WheelSpeedRpmStats_error : 96|16@1- (1,0) [-32768|32767] "" Vector__XXX
  SG_ EngineRpmStats_version : 112|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ EngineRpmStats_validMask : 120|8@1+ (1,0) [0|255] "" Vector__XXX
- SG_ EngineRpmStats_pulseIntervalUs : 128|32@1+ (1,0) [0|4294967295] "us" Vector__XXX
+ SG_ EngineRpmStats_pulseIntervalMicros : 128|32@1+ (1,0) [0|4294967295] "us" Vector__XXX
  SG_ EngineRpmStats_sampleAgeMicros : 160|32@1+ (1,0) [0|4294967295] "us" Vector__XXX
- SG_ EngineRpmStats_acceptedPulses : 192|32@1+ (1,0) [0|4294967295] "" Vector__XXX
- SG_ EngineRpmStats_rejectedPulses : 224|32@1+ (1,0) [0|4294967295] "" Vector__XXX
+ SG_ EngineRpmStats_acceptedPulseCount : 192|32@1+ (1,0) [0|4294967295] "" Vector__XXX
+ SG_ EngineRpmStats_rejectedPulseCount : 224|32@1+ (1,0) [0|4294967295] "" Vector__XXX
  SG_ EngineRpmStats_error : 256|16@1- (1,0) [-32768|32767] "" Vector__XXX
 
 SIG_VALTYPE_ 516 IMU_Data_accel_x : 1;
@@ -130,4 +130,3 @@ SIG_VALTYPE_ 516 IMU_Data_rotation_j : 1;
 SIG_VALTYPE_ 516 IMU_Data_rotation_k : 1;
 SIG_VALTYPE_ 516 IMU_Data_rotation_real : 1;
 SIG_VALTYPE_ 517 IMU_Stats_rotation_acc_rad : 1;
-
