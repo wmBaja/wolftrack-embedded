@@ -32,7 +32,7 @@ constexpr uint8_t kAS5600SampleFrameVersion = 1U;
 constexpr uint8_t kAS5600SampleValidMagnet = 0x02U;
 
 struct __attribute__((packed)) AS5600DataSampleFrame {
-  int16_t angleDegrees;
+  int16_t angleCentiDegrees;
 };
 
 struct __attribute__((packed)) AS5600StatsSampleFrame {

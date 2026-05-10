@@ -74,10 +74,20 @@ constexpr PulseRpmSubSensorContext kEngineRpmSensorStats{
     .countRisingEdge = false,
 };
 
-constexpr MLX90614SensorContext kIRSensorCVT{
+constexpr MLX90614SubSensorContext kIRSensorCVTData{
     .base = {
-        .name = "IR CVT Temp Sensor",
-        .payloadSize = kMLX90614SensorPayloadSize,
+        .name = "IR CVT Temp Data",
+        .payloadSize = kMLX90614DataSensorPayloadSize,
+    },
+    .runtime = &gIRRuntime,
+    .i2cAddress = MLX90614_I2CADDR,
+    .clockHz = 115000,
+};
+
+constexpr MLX90614SubSensorContext kIRSensorCVTStats{
+    .base = {
+        .name = "IR CVT Temp Stats",
+        .payloadSize = kMLX90614StatsSensorPayloadSize,
     },
     .runtime = &gIRRuntime,
     .i2cAddress = MLX90614_I2CADDR,
@@ -109,79 +119,78 @@ constexpr AnalogSensorContext kThrottlePosSensor{
 };
 
 constexpr SensorDescriptor kIRSensorGroup[] = {
-    MakeMLX90614Sensor(&kIRSensorCVT),
+    MakeMLX90614DataSensor(&kIRSensorCVTData),
 };
 
-constexpr SensorDescriptor kWheelSpeedRpmDataGroup[] = {
+constexpr SensorDescriptor kIRSensorStatsGroup[] = {
+    MakeMLX90614StatsSensor(&kIRSensorCVTStats),
+};
+
+constexpr SensorDescriptor kRpmDataGroup[] = {
     MakeAnalogRpmDataSensor(&kWheelSpeedRpmSensorData),
-};
-
-constexpr SensorDescriptor kWheelSpeedRpmStatsGroup[] = {
-    MakeAnalogRpmStatsSensor(&kWheelSpeedRpmSensorStats),
-};
-
-constexpr SensorDescriptor kEngineRpmDataGroup[] = {
     MakePulseRpmDataSensor(&kEngineRpmSensorData),
 };
 
-constexpr SensorDescriptor kEngineRpmStatsGroup[] = {
+constexpr SensorDescriptor kRpmStatsGroup[] = {
+    MakeAnalogRpmStatsSensor(&kWheelSpeedRpmSensorStats),
     MakePulseRpmStatsSensor(&kEngineRpmSensorStats),
 };
 
-constexpr SensorDescriptor kFastGroupSensors[] = {
+constexpr SensorDescriptor kSuspensionGroup[] = {
     MakeAnalogSensor(&kRLSuspensionSensor),
     MakeAnalogSensor(&kRRSuspensionSensor),
+};
+
+constexpr SensorDescriptor kThrottlePosGroup[] = {
     MakeAnalogSensor(&kThrottlePosSensor),
 };
 
 constexpr MessageGroupConfig kRearGroups[] = {
     {
-        .name = "Fast Sensors",
+        .name = "Suspension",
         .canId = 0x100,
-        .pollIntervalMs = 10,
-        .sensors = kFastGroupSensors,
-        .sensorCount = sizeof(kFastGroupSensors) / sizeof(kFastGroupSensors[0]),
+        .pollIntervalMs = 1,
+        .sensors = kSuspensionGroup,
+        .sensorCount = sizeof(kSuspensionGroup) / sizeof(kSuspensionGroup[0]),
     },
     {
-        .name = "IR CVT Temp",
+        .name = "Throttle Position",
         .canId = 0x101,
+        .pollIntervalMs = 20,
+        .sensors = kThrottlePosGroup,
+        .sensorCount = sizeof(kThrottlePosGroup) / sizeof(kThrottlePosGroup[0]),
+    },
+    {
+        .name = "IR CVT Temp Data",
+        .canId = 0x102,
         .pollIntervalMs = 50,
         .sensors = kIRSensorGroup,
         .sensorCount = sizeof(kIRSensorGroup) / sizeof(kIRSensorGroup[0]),
     },
     {
-        .name = "Wheel Speed RPM Data",
-        .canId = 0x102,
-        .pollIntervalMs = 10,
-        .sensors = kWheelSpeedRpmDataGroup,
-        .sensorCount =
-            sizeof(kWheelSpeedRpmDataGroup) /
-            sizeof(kWheelSpeedRpmDataGroup[0]),
-    },
-    {
-        .name = "Wheel Speed RPM Stats",
+        .name = "IR CVT Temp Stats",
         .canId = 0x103,
-        .pollIntervalMs = 100,
-        .sensors = kWheelSpeedRpmStatsGroup,
-        .sensorCount =
-            sizeof(kWheelSpeedRpmStatsGroup) /
-            sizeof(kWheelSpeedRpmStatsGroup[0]),
+        .pollIntervalMs = 200,
+        .sensors = kIRSensorStatsGroup,
+        .sensorCount = sizeof(kIRSensorStatsGroup) / sizeof(kIRSensorStatsGroup[0]),
     },
     {
-        .name = "Engine RPM Data",
+        .name = "RPM Data",
         .canId = 0x104,
         .pollIntervalMs = 10,
-        .sensors = kEngineRpmDataGroup,
+        .sensors = kRpmDataGroup,
         .sensorCount =
-            sizeof(kEngineRpmDataGroup) / sizeof(kEngineRpmDataGroup[0]),
+            sizeof(kRpmDataGroup) /
+            sizeof(kRpmDataGroup[0]),
     },
     {
-        .name = "Engine RPM Stats",
+        .name = "RPM Stats",
         .canId = 0x105,
-        .pollIntervalMs = 100,
-        .sensors = kEngineRpmStatsGroup,
+        .pollIntervalMs = 200,
+        .sensors = kRpmStatsGroup,
         .sensorCount =
-            sizeof(kEngineRpmStatsGroup) / sizeof(kEngineRpmStatsGroup[0]),
+            sizeof(kRpmStatsGroup) /
+            sizeof(kRpmStatsGroup[0]),
     },
 };
 

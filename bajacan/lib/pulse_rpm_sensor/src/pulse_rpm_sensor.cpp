@@ -286,9 +286,6 @@ void UpdateRuntimeData(const PulseRpmSubSensorContext &config) {
 
 void CopyDataFrame(const PulseRpmSensorRuntime &runtime,
                    PulseRpmDataSampleFrame &sample) {
-  sample.version = kPulseRpmSampleFrameVersion;
-  sample.validMask = runtime.validMask;
-  sample.error = runtime.lastError;
   sample.milliRpm = runtime.lastMilliRpm;
 }
 
@@ -300,16 +297,12 @@ void CopyStatsFrame(const PulseRpmSensorRuntime &runtime,
   sample.sampleAgeMicros = runtime.sampleAgeMicros;
   sample.acceptedPulseCount = runtime.acceptedPulseCount;
   sample.rejectedPulseCount = runtime.rejectedPulseCount;
-  sample.milliRpm = runtime.lastMilliRpm;
   sample.error = runtime.lastError;
 }
 
 void FillUninitializedDataFrame(const PulseRpmSensorRuntime *runtime,
                                 PulseRpmDataSampleFrame &sample) {
-  sample.version = kPulseRpmSampleFrameVersion;
-  sample.validMask = 0U;
-  sample.error = runtime != nullptr ? runtime->initializationError
-                                    : kPulseRpmSensorErrorNotInitialized;
+  (void)runtime;
   sample.milliRpm = 0;
 }
 
@@ -321,7 +314,6 @@ void FillUninitializedStatsFrame(const PulseRpmSensorRuntime *runtime,
   sample.sampleAgeMicros = 0U;
   sample.acceptedPulseCount = 0U;
   sample.rejectedPulseCount = 0U;
-  sample.milliRpm = 0;
   sample.error = runtime != nullptr ? runtime->initializationError
                                     : kPulseRpmSensorErrorNotInitialized;
 }

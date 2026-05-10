@@ -27,9 +27,6 @@ constexpr int16_t kAnalogRpmSensorErrorSampleTooOld = -3;
 constexpr int16_t kAnalogRpmSensorErrorAdcReadFailed = -4;
 
 struct __attribute__((packed)) AnalogRpmDataSampleFrame {
-  uint8_t version;
-  uint8_t validMask;
-  int16_t error;
   int32_t milliRpm;
 };
 
@@ -40,8 +37,6 @@ struct __attribute__((packed)) AnalogRpmStatsSampleFrame {
   uint16_t rawAngle;
   uint16_t angleCentiDegrees;
   uint32_t sampleIntervalMicros;
-  int32_t rawMilliRpm;
-  int32_t filteredMilliRpm;
   int16_t error;
 };
 

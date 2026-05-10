@@ -46,10 +46,10 @@ constexpr BNO085SensorContext kExampleIMU{
 //     .offsetCentiDegrees = 0,
 // };
 
-// constexpr MLX90614SensorContext kExampleIrTemperatureSensor{
+// constexpr MLX90614SubSensorContext kExampleIrTemperatureData{
 //     .base = {
-//         .name = "IR Temperature",
-//         .payloadSize = kMLX90614SensorPayloadSize,
+//         .name = "IR Temperature Data",
+//         .payloadSize = kMLX90614DataSensorPayloadSize,
 //     },
 //     .runtime = &gExampleIrSensorRuntime,
 //     .i2cAddress = MLX90614_I2CADDR,

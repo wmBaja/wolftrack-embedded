@@ -8,7 +8,7 @@ namespace {
 
 struct AS5600Capture {
   uint16_t rawAngle = 0U;
-  int16_t angleDegrees = 0;
+  int16_t angleCentiDegrees = 0;
   uint16_t magnitude = 0U;
   uint8_t agc = 0U;
   uint8_t status = 0U;
@@ -93,10 +93,10 @@ bool CaptureAs5600Sample(const AS5600SubSensorContext &config,
   }
 
   if (config.angleMapping == AS5600AngleMapping::CenteredWindow) {
-    sample.angleDegrees = MapAngleToCenteredCentiDegrees(
+    sample.angleCentiDegrees = MapAngleToCenteredCentiDegrees(
         angleForMapping, config.maxMappedAngleCentiDegrees);
   } else {
-    sample.angleDegrees = static_cast<int16_t>(
+    sample.angleCentiDegrees = static_cast<int16_t>(
         AS5600RawAngleToCentiDegrees(sample.rawAngle));
   }
 
@@ -188,7 +188,7 @@ bool AS5600DataSensorSample(const void *ctx, CANFDMessage &outFrame) {
   }
 
   AS5600DataSampleFrame sample = {
-      .angleDegrees = capture.angleDegrees,
+      .angleCentiDegrees = capture.angleCentiDegrees,
   };
   CopyDataFrameToCan(sample, outFrame);
   return true;

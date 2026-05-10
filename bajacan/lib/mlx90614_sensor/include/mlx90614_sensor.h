@@ -25,20 +25,27 @@ constexpr int16_t kMLX90614SensorErrorLowLevelShortRead = -7;
 constexpr int16_t kMLX90614SensorErrorBeginFailed = -15;
 constexpr int16_t kMLX90614SensorErrorNotInitialized = -16;
 
-struct __attribute__((packed)) MLX90614SampleFrame {
-  uint8_t version;
-  uint8_t validMask;
+struct __attribute__((packed)) MLX90614DataSampleFrame {
   int32_t ambientCentiDegrees;
   int32_t objectCentiDegrees;
+};
+
+struct __attribute__((packed)) MLX90614StatsSampleFrame {
+  uint8_t version;
+  uint8_t validMask;
   uint16_t emissivityTenThousandths;
   int16_t error;
 };
 
-static_assert(sizeof(MLX90614SampleFrame) <= 64U,
-              "MLX90614 sample frame must fit in one CAN FD payload");
+static_assert(sizeof(MLX90614DataSampleFrame) <= 64U,
+              "MLX90614 data frame must fit in one CAN FD payload");
+static_assert(sizeof(MLX90614StatsSampleFrame) <= 64U,
+              "MLX90614 stats frame must fit in one CAN FD payload");
 
-constexpr uint8_t kMLX90614SensorPayloadSize =
-    static_cast<uint8_t>(sizeof(MLX90614SampleFrame));
+constexpr uint8_t kMLX90614DataSensorPayloadSize =
+    static_cast<uint8_t>(sizeof(MLX90614DataSampleFrame));
+constexpr uint8_t kMLX90614StatsSensorPayloadSize =
+    static_cast<uint8_t>(sizeof(MLX90614StatsSampleFrame));
 
 class MLX90614Driver : public DFRobot_MLX90614_I2C {
  public:
@@ -91,7 +98,7 @@ struct MLX90614SensorRuntime {
   uint32_t nextEmissivityRefreshAtMs = 0U;
 };
 
-struct MLX90614SensorContext {
+struct MLX90614SubSensorContext {
   SensorContext base;
   MLX90614SensorRuntime *runtime;
   uint8_t i2cAddress;
@@ -99,14 +106,26 @@ struct MLX90614SensorContext {
 };
 
 bool MLX90614SensorBegin(const void *ctx);
-bool MLX90614SensorSample(const void *ctx, CANFDMessage &outFrame);
+bool MLX90614DataSensorSample(const void *ctx, CANFDMessage &outFrame);
+bool MLX90614StatsSensorSample(const void *ctx, CANFDMessage &outFrame);
 
-constexpr SensorDescriptor MakeMLX90614Sensor(
-    const MLX90614SensorContext *ctx) {
+constexpr SensorDescriptor MakeMLX90614DataSensor(
+    const MLX90614SubSensorContext *ctx) {
   return SensorDescriptor{
       .context = ctx,
       .begin = MLX90614SensorBegin,
-      .sample = MLX90614SensorSample,
+      .sample = MLX90614DataSensorSample,
+      .suspend = nullptr,
+      .resume = nullptr,
+  };
+}
+
+constexpr SensorDescriptor MakeMLX90614StatsSensor(
+    const MLX90614SubSensorContext *ctx) {
+  return SensorDescriptor{
+      .context = ctx,
+      .begin = MLX90614SensorBegin,
+      .sample = MLX90614StatsSensorSample,
       .suspend = nullptr,
       .resume = nullptr,
   };
