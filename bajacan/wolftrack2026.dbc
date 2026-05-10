@@ -109,15 +109,17 @@ BO_ 260 Rear_EngineRpmData: 8 RearNode
  SG_ EngineRpmData_error : 16|16@1- (1,0) [-32768|32767] "" Vector__XXX
  SG_ EngineRpmData_milliRpm : 32|32@1- (1,0) [-2147483648|2147483647] "milli_rpm" Vector__XXX
 
-BO_ 261 Rear_EngineRpmStats: 24 RearNode
+BO_ 261 Rear_EngineRpmStats: 32 RearNode
  SG_ EngineRpmStats_version : 0|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ EngineRpmStats_validMask : 8|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ EngineRpmStats_pulseIntervalMicros : 16|32@1+ (1,0) [0|4294967295] "us" Vector__XXX
- SG_ EngineRpmStats_sampleAgeMicros : 48|32@1+ (1,0) [0|4294967295] "us" Vector__XXX
- SG_ EngineRpmStats_acceptedPulseCount : 80|32@1+ (1,0) [0|4294967295] "" Vector__XXX
- SG_ EngineRpmStats_rejectedPulseCount : 112|32@1+ (1,0) [0|4294967295] "" Vector__XXX
- SG_ EngineRpmStats_milliRpm : 144|32@1- (1,0) [-2147483648|2147483647] "milli_rpm" Vector__XXX
- SG_ EngineRpmStats_error : 176|16@1- (1,0) [-32768|32767] "" Vector__XXX
+ SG_ EngineRpmStats_averagedPulseIntervalMicros : 48|32@1+ (1,0) [0|4294967295] "us" Vector__XXX
+ SG_ EngineRpmStats_pendingOutlierIntervalMicros : 80|32@1+ (1,0) [0|4294967295] "us" Vector__XXX
+ SG_ EngineRpmStats_sampleAgeMicros : 112|32@1+ (1,0) [0|4294967295] "us" Vector__XXX
+ SG_ EngineRpmStats_acceptedPulseCount : 144|32@1+ (1,0) [0|4294967295] "" Vector__XXX
+ SG_ EngineRpmStats_rejectedPulseCount : 176|32@1+ (1,0) [0|4294967295] "" Vector__XXX
+ SG_ EngineRpmStats_milliRpm : 208|32@1- (1,0) [-2147483648|2147483647] "milli_rpm" Vector__XXX
+ SG_ EngineRpmStats_error : 240|16@1- (1,0) [-32768|32767] "" Vector__XXX
 
 SIG_VALTYPE_ 513 IMU_Data_accel_x : 1;
 SIG_VALTYPE_ 513 IMU_Data_accel_y : 1;
