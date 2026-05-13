@@ -136,30 +136,32 @@ constexpr SensorDescriptor kRpmStatsGroup[] = {
     MakePulseRpmStatsSensor(&kEngineRpmSensorStats),
 };
 
-constexpr SensorDescriptor kSuspensionGroup[] = {
-    MakeAnalogSensor(&kRLSuspensionSensor),
-    MakeAnalogSensor(&kRRSuspensionSensor),
-};
+// constexpr SensorDescriptor kSuspensionGroup[] = {
+//    MakeAnalogSensor(&kRLSuspensionSensor),
+//    MakeAnalogSensor(&kRRSuspensionSensor),
+// };
 
-constexpr SensorDescriptor kThrottlePosGroup[] = {
-    MakeAnalogSensor(&kThrottlePosSensor),
-};
+// constexpr SensorDescriptor kThrottlePosGroup[] = {
+//    MakeAnalogSensor(&kThrottlePosSensor),
+// };
 
 constexpr MessageGroupConfig kRearGroups[] = {
-    {
-        .name = "Suspension",
-        .canId = 0x100,
-        .pollIntervalMs = 1,
-        .sensors = kSuspensionGroup,
-        .sensorCount = sizeof(kSuspensionGroup) / sizeof(kSuspensionGroup[0]),
-    },
-    {
-        .name = "Throttle Position",
-        .canId = 0x101,
-        .pollIntervalMs = 20,
-        .sensors = kThrottlePosGroup,
-        .sensorCount = sizeof(kThrottlePosGroup) / sizeof(kThrottlePosGroup[0]),
-    },
+    // Suspension group intentionally disabled because those sensors are not wired.
+    // {
+    //     .name = "Suspension",
+    //     .canId = 0x100,
+    //     .pollIntervalMs = 1,
+    //     .sensors = kSuspensionGroup,
+    //     .sensorCount = sizeof(kSuspensionGroup) / sizeof(kSuspensionGroup[0]),
+    // },
+    
+    // {
+    //    .name = "Throttle Position",
+    //    .canId = 0x101,
+    //    .pollIntervalMs = 20,
+    //    .sensors = kThrottlePosGroup,
+    //    .sensorCount = sizeof(kThrottlePosGroup) / sizeof(kThrottlePosGroup[0]),
+    //},
     {
         .name = "IR CVT Temp Data",
         .canId = 0x102,
