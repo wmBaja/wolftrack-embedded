@@ -364,6 +364,9 @@ void setup() {
 #if BAJACAN_ENABLE_DEBUG_PRINTS
   Serial.begin(115200); // Serial0 for debug
 #endif
+  if (kBoardConfig.startupDelayMs > 0U) {
+    delay(kBoardConfig.startupDelayMs);
+  }
 
   const uint32_t canErrorCode = ConfigureCan();
   if (canErrorCode != 0U) {

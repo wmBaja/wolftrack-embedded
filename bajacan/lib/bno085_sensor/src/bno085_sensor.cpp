@@ -40,8 +40,6 @@ void ResetCachedSample(BNO085SensorRuntime &runtime) {
 
 void CopyDataRuntimeToFrame(const BNO085SensorRuntime &runtime, CANFDMessage &outFrame) {
   BNO085DataSampleFrame frame = {};
-  frame.version = kBNO085SampleFrameVersion;
-  frame.validMask = runtime.validMask;
   frame.accelerometer = runtime.accelerometer;
   frame.angularVelocity = runtime.angularVelocity;
   frame.linearAcceleration = runtime.linearAcceleration;

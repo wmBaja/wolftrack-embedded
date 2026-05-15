@@ -34,16 +34,12 @@ struct __attribute__((packed)) BNO085Quaternion {
 };
 
 struct __attribute__((packed)) BNO085DataSampleFrameWithoutRotation {
-  uint8_t version;
-  uint8_t validMask;
   BNO085Vector3 accelerometer;
   BNO085Vector3 angularVelocity;
   BNO085Vector3 linearAcceleration;
 };
 
 struct __attribute__((packed)) BNO085DataSampleFrameWithRotation {
-  uint8_t version;
-  uint8_t validMask;
   BNO085Vector3 accelerometer;
   BNO085Vector3 angularVelocity;
   BNO085Vector3 linearAcceleration;

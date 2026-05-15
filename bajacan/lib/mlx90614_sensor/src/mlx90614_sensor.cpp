@@ -28,32 +28,40 @@ struct MLX90614ValidationResult {
   uint8_t lowLevelData[3] = {};
 };
 
-const MLX90614SensorContext *GetMLX90614Context(const void *ctx) {
-  return static_cast<const MLX90614SensorContext *>(ctx);
+struct MLX90614Capture {
+  uint8_t validMask = 0U;
+  int32_t ambientCentiDegrees = 0;
+  int32_t objectCentiDegrees = 0;
+  uint16_t emissivityTenThousandths = 0U;
+  int16_t error = kMLX90614SensorErrorNone;
+};
+
+const MLX90614SubSensorContext *GetMLX90614Context(const void *ctx) {
+  return static_cast<const MLX90614SubSensorContext *>(ctx);
 }
 
-MLX90614Driver *GetDriver(const MLX90614SensorContext &config) {
+MLX90614Driver *GetDriver(const MLX90614SubSensorContext &config) {
   if (config.runtime == nullptr) {
     return nullptr;
   }
   return &config.runtime->driver;
 }
 
-TwoWire *GetWire(const MLX90614SensorContext &config) {
+TwoWire *GetWire(const MLX90614SubSensorContext &config) {
   if (config.runtime == nullptr) {
     return nullptr;
   }
   return config.runtime->wire;
 }
 
-void ApplyClock(const MLX90614SensorContext &config) {
+void ApplyClock(const MLX90614SubSensorContext &config) {
   TwoWire *wire = GetWire(config);
   if (wire != nullptr && config.clockHz != 0U) {
     wire->setClock(config.clockHz);
   }
 }
 
-void ApplyPins(const MLX90614SensorContext &config) {
+void ApplyPins(const MLX90614SubSensorContext &config) {
 #if defined(ARDUINO_ARCH_MEGAAVR)
   TwoWire *wire = GetWire(config);
   if (wire == nullptr) {
@@ -69,7 +77,7 @@ void ApplyPins(const MLX90614SensorContext &config) {
 #endif
 }
 
-void ApplySpecialConfig(const MLX90614SensorContext &config) {
+void ApplySpecialConfig(const MLX90614SubSensorContext &config) {
 #if defined(ARDUINO_ARCH_MEGAAVR)
   TwoWire *wire = GetWire(config);
   if (wire != nullptr) {
@@ -82,7 +90,7 @@ void ApplySpecialConfig(const MLX90614SensorContext &config) {
 #endif
 }
 
-void ApplyInternalPullups(const MLX90614SensorContext &config) {
+void ApplyInternalPullups(const MLX90614SubSensorContext &config) {
 #if defined(ARDUINO_ARCH_MEGAAVR)
   TwoWire *wire = GetWire(config);
   if (wire != nullptr) {
@@ -104,13 +112,19 @@ uint16_t EmissivityRegToTenThousandths(const uint16_t emissivityReg) {
       65535U);
 }
 
-void CopySampleToFrame(const MLX90614SampleFrame &sample,
-                       CANFDMessage &outFrame) {
+void CopyDataFrameToCan(const MLX90614DataSampleFrame &sample,
+                        CANFDMessage &outFrame) {
   outFrame.len = sizeof(sample);
   memcpy(outFrame.data, &sample, sizeof(sample));
 }
 
-void CaptureReadError(MLX90614SampleFrame &sample, const int16_t error) {
+void CopyStatsFrameToCan(const MLX90614StatsSampleFrame &sample,
+                         CANFDMessage &outFrame) {
+  outFrame.len = sizeof(sample);
+  memcpy(outFrame.data, &sample, sizeof(sample));
+}
+
+void CaptureReadError(MLX90614Capture &sample, const int16_t error) {
   if (sample.error == kMLX90614SensorErrorNone) {
     sample.error = error;
   }
@@ -143,7 +157,7 @@ bool ReadRegister(MLX90614Driver &driver, const uint8_t reg, uint16_t &outValue,
   return true;
 }
 
-bool ReadRegisterWithRetry(const MLX90614SensorContext &config,
+bool ReadRegisterWithRetry(const MLX90614SubSensorContext &config,
                            MLX90614Driver &driver, const uint8_t reg,
                            uint16_t &outValue,
                            MLX90614ValidationResult *validation = nullptr) {
@@ -163,7 +177,7 @@ bool ReadRegisterWithRetry(const MLX90614SensorContext &config,
 }
 
 MLX90614ValidationResult ReadValidationRegisters(
-    const MLX90614SensorContext &config, MLX90614Driver &driver) {
+    const MLX90614SubSensorContext &config, MLX90614Driver &driver) {
   MLX90614ValidationResult result = {};
 
   uint16_t ambientRaw = 0U;
@@ -218,7 +232,7 @@ int16_t ValidationErrorCode(const MLX90614ValidationResult &result) {
   return kMLX90614SensorErrorBeginFailed;
 }
 
-bool WakeDriver(const MLX90614SensorContext &config, MLX90614Driver &driver) {
+bool WakeDriver(const MLX90614SubSensorContext &config, MLX90614Driver &driver) {
   ApplyPins(config);
   ApplySpecialConfig(config);
   ApplyInternalPullups(config);
@@ -241,7 +255,7 @@ void PrintI2cAddress(const uint8_t address) {
   PrintHexByte(address);
 }
 
-void PrintBeginAttempt(const MLX90614SensorContext &config, const uint8_t attempt,
+void PrintBeginAttempt(const MLX90614SubSensorContext &config, const uint8_t attempt,
                        const int beginResult) {
   PrintTimestampMs(millis());
   Serial.print("MLX90614 begin attempt ");
@@ -295,7 +309,7 @@ void PrintValidationResult(const MLX90614ValidationResult &result,
   Serial.println();
 }
 
-void PrintSampleDiagnostics(const MLX90614SampleFrame &sample) {
+void PrintSampleDiagnostics(const MLX90614Capture &sample) {
   PrintTimestampMs(millis());
   Serial.print("MLX90614 first sample validMask=0x");
   PrintHexByte(sample.validMask);
@@ -322,7 +336,7 @@ void PrintSampleDiagnostics(const MLX90614SampleFrame &sample) {
   Serial.println();
 }
 #else
-void PrintBeginAttempt(const MLX90614SensorContext &config,
+void PrintBeginAttempt(const MLX90614SubSensorContext &config,
                        const uint8_t attempt, const int beginResult) {
   (void)config;
   (void)attempt;
@@ -336,14 +350,14 @@ void PrintValidationResult(const MLX90614ValidationResult &result,
   (void)stage;
 }
 
-void PrintSampleDiagnostics(const MLX90614SampleFrame &sample) {
+void PrintSampleDiagnostics(const MLX90614Capture &sample) {
   (void)sample;
 }
 #endif
 
-void PopulateTemperatures(const MLX90614SensorContext &config,
+void PopulateTemperatures(const MLX90614SubSensorContext &config,
                           MLX90614Driver &driver,
-                          MLX90614SampleFrame &sample) {
+                          MLX90614Capture &sample) {
   uint16_t ambientRaw = 0U;
   if (!ReadRegisterWithRetry(config, driver, MLX90614_TA, ambientRaw)) {
     CaptureReadError(sample, kMLX90614SensorErrorAmbientReadFailed);
@@ -365,7 +379,7 @@ void PopulateTemperatures(const MLX90614SensorContext &config,
   }
 }
 
-void UpdateCachedEmissivity(const MLX90614SensorContext &config,
+void UpdateCachedEmissivity(const MLX90614SubSensorContext &config,
                             MLX90614SensorRuntime &runtime,
                             MLX90614Driver &driver) {
   runtime.nextEmissivityRefreshAtMs =
@@ -380,9 +394,9 @@ void UpdateCachedEmissivity(const MLX90614SensorContext &config,
   runtime.emissivityCached = true;
 }
 
-void PopulateEmissivity(const MLX90614SensorContext &config,
+void PopulateEmissivity(const MLX90614SubSensorContext &config,
                         MLX90614SensorRuntime &runtime,
-                        MLX90614Driver &driver, MLX90614SampleFrame &sample) {
+                        MLX90614Driver &driver, MLX90614Capture &sample) {
   const uint32_t nowMs = millis();
   if (!runtime.emissivityCached || nowMs >= runtime.nextEmissivityRefreshAtMs) {
     UpdateCachedEmissivity(config, runtime, driver);
@@ -398,10 +412,40 @@ void PopulateEmissivity(const MLX90614SensorContext &config,
   sample.validMask |= kMLX90614SampleValidEmissivity;
 }
 
+bool CaptureSample(const MLX90614SubSensorContext &config,
+                   MLX90614Capture &sample) {
+  if (!config.runtime->initialized) {
+    sample.error = config.runtime->lastError;
+    if (sample.error == kMLX90614SensorErrorNone) {
+      sample.error = kMLX90614SensorErrorNotInitialized;
+    }
+    return true;
+  }
+
+  MLX90614Driver *driver = GetDriver(config);
+  if (driver == nullptr) {
+    return false;
+  }
+
+  ApplyClock(config);
+  sample.error = kMLX90614SensorErrorNone;
+  PopulateTemperatures(config, *driver, sample);
+  if (kMLX90614InterRegisterDelayMs > 0U) {
+    delay(kMLX90614InterRegisterDelayMs);
+  }
+  PopulateEmissivity(config, *config.runtime, *driver, sample);
+  config.runtime->lastError = sample.error;
+  if (!config.runtime->firstSampleDebugPrinted) {
+    PrintSampleDiagnostics(sample);
+    config.runtime->firstSampleDebugPrinted = true;
+  }
+  return true;
+}
+
 }  // namespace
 
 bool MLX90614SensorBegin(const void *ctx) {
-  const MLX90614SensorContext *config = GetMLX90614Context(ctx);
+  const MLX90614SubSensorContext *config = GetMLX90614Context(ctx);
   if (config == nullptr || config->runtime == nullptr) {
     return false;
   }
@@ -489,41 +533,42 @@ bool MLX90614SensorBegin(const void *ctx) {
   return false;
 }
 
-bool MLX90614SensorSample(const void *ctx, CANFDMessage &outFrame) {
-  const MLX90614SensorContext *config = GetMLX90614Context(ctx);
+bool MLX90614DataSensorSample(const void *ctx, CANFDMessage &outFrame) {
+  const MLX90614SubSensorContext *config = GetMLX90614Context(ctx);
   if (config == nullptr || config->runtime == nullptr) {
     return false;
   }
 
-  MLX90614SampleFrame sample = {};
-  sample.version = kMLX90614SampleFrameVersion;
-
-  if (!config->runtime->initialized) {
-    sample.error = config->runtime->lastError;
-    if (sample.error == kMLX90614SensorErrorNone) {
-      sample.error = kMLX90614SensorErrorNotInitialized;
-    }
-    CopySampleToFrame(sample, outFrame);
-    return true;
-  }
-
-  MLX90614Driver *driver = GetDriver(*config);
-  if (driver == nullptr) {
+  MLX90614Capture capture = {};
+  if (!CaptureSample(*config, capture)) {
     return false;
   }
 
-  ApplyClock(*config);
-  sample.error = kMLX90614SensorErrorNone;
-  PopulateTemperatures(*config, *driver, sample);
-  if (kMLX90614InterRegisterDelayMs > 0U) {
-    delay(kMLX90614InterRegisterDelayMs);
+  MLX90614DataSampleFrame sample = {
+      .ambientCentiDegrees = capture.ambientCentiDegrees,
+      .objectCentiDegrees = capture.objectCentiDegrees,
+  };
+  CopyDataFrameToCan(sample, outFrame);
+  return true;
+}
+
+bool MLX90614StatsSensorSample(const void *ctx, CANFDMessage &outFrame) {
+  const MLX90614SubSensorContext *config = GetMLX90614Context(ctx);
+  if (config == nullptr || config->runtime == nullptr) {
+    return false;
   }
-  PopulateEmissivity(*config, *config->runtime, *driver, sample);
-  config->runtime->lastError = sample.error;
-  if (!config->runtime->firstSampleDebugPrinted) {
-    PrintSampleDiagnostics(sample);
-    config->runtime->firstSampleDebugPrinted = true;
+
+  MLX90614Capture capture = {};
+  if (!CaptureSample(*config, capture)) {
+    return false;
   }
-  CopySampleToFrame(sample, outFrame);
+
+  MLX90614StatsSampleFrame sample = {
+      .version = kMLX90614SampleFrameVersion,
+      .validMask = capture.validMask,
+      .emissivityTenThousandths = capture.emissivityTenThousandths,
+      .error = capture.error,
+  };
+  CopyStatsFrameToCan(sample, outFrame);
   return true;
 }

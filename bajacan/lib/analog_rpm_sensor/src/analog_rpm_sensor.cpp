@@ -281,9 +281,6 @@ void UpdateRuntimeData(const AnalogRpmSubSensorContext &config) {
 
 void CopyDataFrame(const AnalogRpmSensorRuntime &runtime,
                    AnalogRpmDataSampleFrame &sample) {
-  sample.version = kAnalogRpmSampleFrameVersion;
-  sample.validMask = runtime.validMask;
-  sample.error = runtime.lastError;
   sample.milliRpm = runtime.lastFilteredMilliRpm;
 }
 
@@ -295,8 +292,6 @@ void CopyStatsFrame(const AnalogRpmSensorRuntime &runtime,
   sample.rawAngle = runtime.rawAngle;
   sample.angleCentiDegrees = runtime.angleCentiDegrees;
   sample.sampleIntervalMicros = runtime.sampleIntervalMicros;
-  sample.rawMilliRpm = runtime.lastRawMilliRpm;
-  sample.filteredMilliRpm = runtime.lastFilteredMilliRpm;
   sample.error = runtime.lastError;
 }
 
@@ -307,8 +302,6 @@ void ApplyCachedSampleFreshness(const uint32_t now,
     sample.validMask = 0U;
     sample.error = kAnalogRpmSensorErrorSampleTooOld;
     sample.sampleIntervalMicros = 0U;
-    sample.rawMilliRpm = 0;
-    sample.filteredMilliRpm = 0;
     return;
   }
 
@@ -323,8 +316,6 @@ void ApplyCachedSampleFreshness(const uint32_t now,
 
   sample.error = kAnalogRpmSensorErrorSampleTooOld;
   sample.validMask &= static_cast<uint8_t>(~kAnalogRpmSampleValidRpm);
-  sample.rawMilliRpm = 0;
-  sample.filteredMilliRpm = 0;
 }
 
 }  // namespace
@@ -349,8 +340,6 @@ bool AnalogRpmDataSensorSample(const void *ctx, CANFDMessage &outFrame) {
   if (config == nullptr || config->runtime == nullptr ||
       !config->runtime->initialized) {
     AnalogRpmDataSampleFrame sample = {};
-    sample.version = kAnalogRpmSampleFrameVersion;
-    sample.error = kAnalogRpmSensorErrorNotInitialized;
     outFrame.len = sizeof(sample);
     memcpy(outFrame.data, &sample, sizeof(sample));
     return true;

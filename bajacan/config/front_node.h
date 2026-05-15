@@ -21,6 +21,7 @@ inline BNO085SensorRuntime gImuRuntime{};
 
 constexpr uint16_t kSteeringZPosition = 3419U;
 constexpr uint16_t kSteeringMPosition = 1650U;
+constexpr uint16_t kImuDataCanPollIntervalMs = 10U;
 constexpr float kSteeringMaxAngleDegrees =
     ((static_cast<float>(kAS5600CountsPerRevolution - kSteeringZPosition +
                          kSteeringMPosition) /
@@ -41,7 +42,7 @@ constexpr BNO085SubSensorContext kIMUData{
     .clockHz = 400000,
     .interruptPin = -1,
     .resetPin = -1,
-    .reportIntervalMs = 2,
+    .reportIntervalMs = 10,
 };
 
 constexpr BNO085SubSensorContext kIMUStats{
@@ -54,13 +55,30 @@ constexpr BNO085SubSensorContext kIMUStats{
     .clockHz = 400000,
     .interruptPin = -1,
     .resetPin = -1,
-    .reportIntervalMs = 2, // Underlying sensor runs at 2ms
+    .reportIntervalMs = 10, // Underlying sensor runs at 1ms; CAN stats publish at 200ms.
 };
 
-constexpr AS5600SensorContext kSteeringPos{
+constexpr AS5600SubSensorContext kSteeringPosData{
     .base = {
-        .name = "Steering Angle Encoder",
-        .payloadSize = kAS5600SensorPayloadSize,
+        .name = "Steering Angle Data",
+        .payloadSize = kAS5600DataSensorPayloadSize,
+    },
+    .runtime = &gSteeringAngleRuntime,
+    .clockHz = 400000,
+    .directionPin = AS5600_SW_DIRECTION_PIN,
+    .direction = AS5600_CLOCK_WISE,
+    .offsetCentiDegrees = 0,
+    .initializePositionWindow = true,
+    .zPosition = kSteeringZPosition,
+    .mPosition = kSteeringMPosition,
+    .angleMapping = AS5600AngleMapping::CenteredWindow,
+    .maxMappedAngleCentiDegrees = kSteeringMaxAngleCentiDegrees,
+};
+
+constexpr AS5600SubSensorContext kSteeringPosStats{
+    .base = {
+        .name = "Steering Angle Stats",
+        .payloadSize = kAS5600StatsSensorPayloadSize,
     },
     .runtime = &gSteeringAngleRuntime,
     .clockHz = 400000,
@@ -116,35 +134,67 @@ constexpr SensorDescriptor kIMUStatsGroup[] = {
     MakeBNO085StatsSensor(&kIMUStats),
 };
 
-constexpr SensorDescriptor kFastGroupSensors[] = {
-    MakeAS5600Sensor(&kSteeringPos),
-    MakeAnalogSensor(&kFrontBrakePressureSensor),
-    MakeAnalogSensor(&kRearBrakePressureSensor),
-    MakeAnalogSensor(&kFLSuspensionSensor),
-    MakeAnalogSensor(&kFRSuspensionSensor),
+constexpr SensorDescriptor kSteeringDataGroup[] = {
+    MakeAS5600DataSensor(&kSteeringPosData),
 };
+
+constexpr SensorDescriptor kSteeringStatsGroup[] = {
+    MakeAS5600StatsSensor(&kSteeringPosStats),
+};
+
+//constexpr SensorDescriptor kBrakePressureGroup[] = {
+//    MakeAnalogSensor(&kFrontBrakePressureSensor),
+//    MakeAnalogSensor(&kRearBrakePressureSensor),
+//};
+
+//constexpr SensorDescriptor kSuspensionGroup[] = {
+//    MakeAnalogSensor(&kFLSuspensionSensor),
+//    MakeAnalogSensor(&kFRSuspensionSensor),
+//};
 
 
 // List of groups (to give to board config)
 constexpr MessageGroupConfig kFrontGroups[] = {
     {
-        .name = "Fast Sensors",
+        .name = "Steering Angle Data",
         .canId = 0x200,
         .pollIntervalMs = 10,
-        .sensors = kFastGroupSensors,
-        .sensorCount = sizeof(kFastGroupSensors) / sizeof(kFastGroupSensors[0]),
+        .sensors = kSteeringDataGroup,
+        .sensorCount = sizeof(kSteeringDataGroup) / sizeof(kSteeringDataGroup[0]),
     },
     {
-        .name = "IMU_Data",
+        .name = "Steering Angle Stats",
         .canId = 0x201,
-        .pollIntervalMs = 2,
+        .pollIntervalMs = 200,
+        .sensors = kSteeringStatsGroup,
+        .sensorCount = sizeof(kSteeringStatsGroup) / sizeof(kSteeringStatsGroup[0]),
+    },
+    // {
+    //    .name = "Brake Pressure",
+    //    .canId = 0x202,
+    //    .pollIntervalMs = 20,
+    //    .sensors = kBrakePressureGroup,
+    //    .sensorCount = sizeof(kBrakePressureGroup) / sizeof(kBrakePressureGroup[0]),
+    //},
+    // Suspension group intentionally disabled because those sensors are not wired.
+    // {
+    //     .name = "Suspension",
+    //     .canId = 0x203,
+    //     .pollIntervalMs = 1,
+    //     .sensors = kSuspensionGroup,
+    //     .sensorCount = sizeof(kSuspensionGroup) / sizeof(kSuspensionGroup[0]),
+    // },
+    {
+        .name = "IMU_Data",
+        .canId = 0x204,
+        .pollIntervalMs = kImuDataCanPollIntervalMs,
         .sensors = kIMUDataGroup,
         .sensorCount = sizeof(kIMUDataGroup) / sizeof(kIMUDataGroup[0]),
     },
     {
         .name = "IMU_Stats",
-        .canId = 0x202,
-        .pollIntervalMs = 100,
+        .canId = 0x205,
+        .pollIntervalMs = 200,
         .sensors = kIMUStatsGroup,
         .sensorCount = sizeof(kIMUStatsGroup) / sizeof(kIMUStatsGroup[0]),
     },
@@ -160,6 +210,7 @@ constexpr BoardConfig kBoardConfig{
     kDefaultArbitrationBitrate,
     kDefaultDataBitrateFactor,
     kDefaultUseExtendedIds,
+    kDefaultStartupDelayMs,
     kDefaultControlCommands,
     kExampleHooks,
     kFrontGroups,

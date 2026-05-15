@@ -25,9 +25,6 @@ constexpr uint16_t kFourStrokeEnginePulsesPerRevolution = 1000U;
 constexpr uint16_t kTwoStrokeEnginePulsesPerRevolution = 500U;
 
 struct __attribute__((packed)) PulseRpmDataSampleFrame {
-  uint8_t version;
-  uint8_t validMask;
-  int16_t error;
   int32_t milliRpm;
 };
 
@@ -38,7 +35,6 @@ struct __attribute__((packed)) PulseRpmStatsSampleFrame {
   uint32_t sampleAgeMicros;
   uint32_t acceptedPulseCount;
   uint32_t rejectedPulseCount;
-  int32_t milliRpm;
   int16_t error;
 };
 
