@@ -5,6 +5,7 @@
 #include <as5600_sensor.h>
 #include <bno085_sensor.h>
 #include <config.h>
+#include <i2c_sensor.h>
 #include <mlx90614_sensor.h>
 #include <pulse_rpm_sensor.h>
 #include <Wire.h>
@@ -23,6 +24,20 @@ inline AnalogRpmSensorRuntime gWheelSpeedRpmRuntime{};
 inline PulseRpmSensorRuntime gEngineRpmRuntime{};
 
 // Grouped sensors table; add entries as real sensors are implemented.
+
+constexpr uint8_t kEsp32AdcI2cAddress = 0x50U;
+constexpr uint16_t kEsp32AdcPollIntervalMs = 5U;
+
+// I2CSensor uses the default Wire bus, matching the front node IMU wiring.
+// Keep the ESP32 ADC bridge off Wire1; Wire1 is reserved here for the IR sensor.
+constexpr I2CSensorContext kEsp32AdcSensor{
+    .base = {
+        .name = "ADS CH1",
+        .payloadSize = kI2cSensorPayloadSize,
+    },
+    .addr = kEsp32AdcI2cAddress,
+    .clockHz = 100000,
+};
 
 constexpr AnalogRpmSubSensorContext kWheelSpeedRpmSensorData{
     .base = {
@@ -136,6 +151,10 @@ constexpr SensorDescriptor kRpmStatsGroup[] = {
     MakePulseRpmStatsSensor(&kEngineRpmSensorStats),
 };
 
+constexpr SensorDescriptor kEsp32AdcGroup[] = {
+    MakeI2CSensor(&kEsp32AdcSensor),
+};
+
 // constexpr SensorDescriptor kSuspensionGroup[] = {
 //    MakeAnalogSensor(&kRLSuspensionSensor),
 //    MakeAnalogSensor(&kRRSuspensionSensor),
@@ -146,6 +165,14 @@ constexpr SensorDescriptor kRpmStatsGroup[] = {
 // };
 
 constexpr MessageGroupConfig kRearGroups[] = {
+    {
+        .name = "ADS_CH1",
+        .canId = 0x106,
+        .pollIntervalMs = kEsp32AdcPollIntervalMs,
+        .sensors = kEsp32AdcGroup,
+        .sensorCount = sizeof(kEsp32AdcGroup) / sizeof(kEsp32AdcGroup[0]),
+        .useExtendedId = kDefaultUseExtendedIds,
+    },
     // Suspension group intentionally disabled because those sensors are not wired.
     // {
     //     .name = "Suspension",
@@ -168,6 +195,7 @@ constexpr MessageGroupConfig kRearGroups[] = {
         .pollIntervalMs = 50,
         .sensors = kIRSensorGroup,
         .sensorCount = sizeof(kIRSensorGroup) / sizeof(kIRSensorGroup[0]),
+        .useExtendedId = kDefaultUseExtendedIds,
     },
     {
         .name = "IR CVT Temp Stats",
@@ -175,6 +203,7 @@ constexpr MessageGroupConfig kRearGroups[] = {
         .pollIntervalMs = 200,
         .sensors = kIRSensorStatsGroup,
         .sensorCount = sizeof(kIRSensorStatsGroup) / sizeof(kIRSensorStatsGroup[0]),
+        .useExtendedId = kDefaultUseExtendedIds,
     },
     {
         .name = "RPM Data",
@@ -184,6 +213,7 @@ constexpr MessageGroupConfig kRearGroups[] = {
         .sensorCount =
             sizeof(kRpmDataGroup) /
             sizeof(kRpmDataGroup[0]),
+        .useExtendedId = kDefaultUseExtendedIds,
     },
     {
         .name = "RPM Stats",
@@ -193,6 +223,7 @@ constexpr MessageGroupConfig kRearGroups[] = {
         .sensorCount =
             sizeof(kRpmStatsGroup) /
             sizeof(kRpmStatsGroup[0]),
+        .useExtendedId = kDefaultUseExtendedIds,
     },
 };
 

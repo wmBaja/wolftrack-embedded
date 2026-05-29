@@ -107,6 +107,7 @@ constexpr MessageGroupConfig kExampleGroups[] = {
         .pollIntervalMs = 500,
         .sensors = kSlowGroupSensors,
         .sensorCount = sizeof(kSlowGroupSensors) / sizeof(kSlowGroupSensors[0]),
+        .useExtendedId = kDefaultUseExtendedIds,
     },
 };
 

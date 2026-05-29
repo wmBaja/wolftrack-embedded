@@ -161,6 +161,7 @@ constexpr MessageGroupConfig kFrontGroups[] = {
         .pollIntervalMs = 10,
         .sensors = kSteeringDataGroup,
         .sensorCount = sizeof(kSteeringDataGroup) / sizeof(kSteeringDataGroup[0]),
+        .useExtendedId = kDefaultUseExtendedIds,
     },
     {
         .name = "Steering Angle Stats",
@@ -168,6 +169,7 @@ constexpr MessageGroupConfig kFrontGroups[] = {
         .pollIntervalMs = 200,
         .sensors = kSteeringStatsGroup,
         .sensorCount = sizeof(kSteeringStatsGroup) / sizeof(kSteeringStatsGroup[0]),
+        .useExtendedId = kDefaultUseExtendedIds,
     },
     // {
     //    .name = "Brake Pressure",
@@ -190,6 +192,7 @@ constexpr MessageGroupConfig kFrontGroups[] = {
         .pollIntervalMs = kImuDataCanPollIntervalMs,
         .sensors = kIMUDataGroup,
         .sensorCount = sizeof(kIMUDataGroup) / sizeof(kIMUDataGroup[0]),
+        .useExtendedId = kDefaultUseExtendedIds,
     },
     {
         .name = "IMU_Stats",
@@ -197,6 +200,7 @@ constexpr MessageGroupConfig kFrontGroups[] = {
         .pollIntervalMs = 200,
         .sensors = kIMUStatsGroup,
         .sensorCount = sizeof(kIMUStatsGroup) / sizeof(kIMUStatsGroup[0]),
+        .useExtendedId = kDefaultUseExtendedIds,
     },
 };
 

@@ -30,6 +30,7 @@ volatile bool gSleepRequested = false;
 volatile bool gWakeRequested = false;
 
 constexpr uint8_t kMaxCanFdPayloadBytes = 64U;
+constexpr uint8_t kMaxGroupPollCatchUpPerLoop = 4U;
 
 struct GroupRuntime {
   const MessageGroupConfig *group;
@@ -239,48 +240,48 @@ void PollGroups(const uint32_t nowMs) {
       continue;
     }
 
-    if (nowMs < runtime.nextPollAtMs) {
-      continue;
-    }
-
-    {
+    uint8_t pollsThisLoop = 0U;
+    while (nowMs >= runtime.nextPollAtMs &&
+           pollsThisLoop < kMaxGroupPollCatchUpPerLoop) {
       const uint32_t scheduledAt = runtime.nextPollAtMs;
       const uint32_t intervalMs = runtime.group->pollIntervalMs;
-      uint32_t nextPoll = scheduledAt + intervalMs;
-      if (nextPoll <= nowMs) {
-        nextPoll = nowMs + intervalMs;
+      runtime.nextPollAtMs = scheduledAt + intervalMs;
+      ++pollsThisLoop;
+
+      CANFDMessage frame;
+      frame.id = runtime.group->canId;
+      frame.ext = runtime.group->useExtendedId;
+      frame.len = runtime.payloadBytes;
+      memset(frame.data, 0, sizeof(frame.data));
+
+      uint8_t payloadOffset = 0U;
+      for (size_t sensorIndex = 0; sensorIndex < runtime.group->sensorCount;
+           ++sensorIndex) {
+        const SensorDescriptor &desc = runtime.group->sensors[sensorIndex];
+        const SensorContext *context = GetSensorContext(desc);
+        if (context == nullptr) {
+          continue;
+        }
+
+        if (!SampleGroupMember(desc, *context, &frame.data[payloadOffset])) {
+          PrintGroupMemberZeroFill(runtime.group->name, context->name, nowMs);
+        }
+        payloadOffset += context->payloadSize;
       }
-      runtime.nextPollAtMs = nextPoll;
-    }
 
-    CANFDMessage frame;
-    frame.id = runtime.group->canId;
-    frame.ext = kBoardConfig.useExtendedIds;
-    frame.len = runtime.payloadBytes;
-    memset(frame.data, 0, sizeof(frame.data));
-
-    uint8_t payloadOffset = 0U;
-    for (size_t sensorIndex = 0; sensorIndex < runtime.group->sensorCount;
-         ++sensorIndex) {
-      const SensorDescriptor &desc = runtime.group->sensors[sensorIndex];
-      const SensorContext *context = GetSensorContext(desc);
-      if (context == nullptr) {
-        continue;
-      }
-
-      if (!SampleGroupMember(desc, *context, &frame.data[payloadOffset])) {
-        PrintGroupMemberZeroFill(runtime.group->name, context->name, nowMs);
-      }
-      payloadOffset += context->payloadSize;
-    }
-
-    frame.pad();
-    const bool sent = gCanDriver.tryToSend(frame);
+      frame.pad();
+      const bool sent = gCanDriver.tryToSend(frame);
 
 #if BAJACAN_ENABLE_DEBUG_PRINTS
-    PrintGroupPoll(runtime.group->name, frame, nowMs);
-    PrintCanTxResult(frame, nowMs, sent);
+      PrintGroupPoll(runtime.group->name, frame, nowMs);
+      PrintCanTxResult(frame, nowMs, sent);
 #endif
+    }
+
+    if (pollsThisLoop == kMaxGroupPollCatchUpPerLoop &&
+        nowMs >= runtime.nextPollAtMs) {
+      runtime.nextPollAtMs = nowMs + runtime.group->pollIntervalMs;
+    }
   }
 }
 

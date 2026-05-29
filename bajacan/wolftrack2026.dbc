@@ -79,9 +79,9 @@ BO_ 517 IMU_Stats: 12 FrontNode
  SG_ IMU_Stats_rotationAccuracy : 56|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ IMU_Stats_rotation_acc_rad : 64|32@1- (1,0) [0|0] "rad" Vector__XXX
 
-BO_ 256 Rear_Suspension: 4 RearNode
- SG_ RLSuspension_raw : 7|16@0+ (1,0) [0|4095] "" Vector__XXX
- SG_ RRSuspension_raw : 23|16@0+ (1,0) [0|4095] "" Vector__XXX
+BO_ 2147483910 ADS_CH1: 8 RearNode
+ SG_ CH1_Voltage : 0|32@1- (1,0) [0|0] "V" Vector__XXX
+ SG_ CH1_Raw : 32|32@1- (1,0) [0|0] "" Vector__XXX
 
 BO_ 257 ThrottlePosition: 2 RearNode
  SG_ ThrottlePos_raw : 7|16@0+ (1,0) [0|4095] "" Vector__XXX
@@ -116,6 +116,7 @@ BO_ 261 RPMStats: 34 RearNode
  SG_ EngineRpmStats_rejectedPulseCount : 224|32@1+ (1,0) [0|4294967295] "" Vector__XXX
  SG_ EngineRpmStats_error : 256|16@1- (1,0) [-32768|32767] "" Vector__XXX
 
+SIG_VALTYPE_ 2147483910 CH1_Voltage : 1;
 SIG_VALTYPE_ 516 IMU_Data_accel_x : 1;
 SIG_VALTYPE_ 516 IMU_Data_accel_y : 1;
 SIG_VALTYPE_ 516 IMU_Data_accel_z : 1;

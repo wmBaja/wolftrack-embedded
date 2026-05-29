@@ -59,6 +59,7 @@ struct MessageGroupConfig {
   uint16_t pollIntervalMs;
   const SensorDescriptor *sensors;
   size_t sensorCount;
+  bool useExtendedId;
 };
 
 // Aggregates the board-specific static data needed by the generic app.
