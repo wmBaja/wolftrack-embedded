@@ -17,7 +17,7 @@ constexpr int16_t kAS5600SensorErrorNotInitialized = -1;
 
 enum class AS5600AngleMapping : uint8_t {
   RawRotation = 0,
-  CenteredWindow = 1,
+  CenteredOffset = 1,
 };
 
 constexpr uint16_t AS5600RawAngleToCentiDegrees(const uint16_t rawAngle) {
@@ -25,6 +25,32 @@ constexpr uint16_t AS5600RawAngleToCentiDegrees(const uint16_t rawAngle) {
       (static_cast<uint32_t>(rawAngle & 0x0FFFU) *
        kAS5600CentiDegreesPerRevolution) /
       kAS5600CountsPerRevolution);
+}
+
+constexpr int32_t AS5600RawDelta(const uint16_t rawAngle, const uint16_t centerRawAngle) {
+  return static_cast<int32_t>(rawAngle & 0x0FFFU) -
+         static_cast<int32_t>(centerRawAngle & 0x0FFFU);
+}
+
+constexpr int16_t AS5600WrappedRawDelta(const uint16_t rawAngle, const uint16_t centerRawAngle) {
+  int32_t delta = static_cast<int32_t>(rawAngle & 0x0FFFU) -
+                  static_cast<int32_t>(centerRawAngle & 0x0FFFU);
+
+  if (delta > static_cast<int32_t>(kAS5600CountsPerRevolution / 2U)) {
+    delta -= static_cast<int32_t>(kAS5600CountsPerRevolution);
+  } else if (delta < -static_cast<int32_t>(kAS5600CountsPerRevolution / 2U)) {
+    delta += static_cast<int32_t>(kAS5600CountsPerRevolution);
+  }
+
+  return static_cast<int16_t>(delta);
+}
+
+constexpr int16_t AS5600RawAngleToCenteredCentiDegrees(
+    const uint16_t rawAngle, const uint16_t centerRawAngle) {
+  return static_cast<int16_t>(
+      (static_cast<int32_t>(AS5600WrappedRawDelta(rawAngle, centerRawAngle)) *
+       static_cast<int32_t>(kAS5600CentiDegreesPerRevolution)) /
+      static_cast<int32_t>(kAS5600CountsPerRevolution));
 }
 
 constexpr uint8_t kAS5600SampleFrameVersion = 1U;
@@ -70,11 +96,8 @@ struct AS5600SubSensorContext {
   uint8_t directionPin;
   uint8_t direction;
   int32_t offsetCentiDegrees;
-  bool initializePositionWindow;
-  uint16_t zPosition;
-  uint16_t mPosition;
+  uint16_t centerRawAngle;
   AS5600AngleMapping angleMapping;
-  int16_t maxMappedAngleCentiDegrees;
 };
 
 bool AS5600SensorBegin(const void *ctx);

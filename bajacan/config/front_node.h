@@ -19,17 +19,10 @@ constexpr BoardHooks kExampleHooks{
 inline AS5600SensorRuntime gSteeringAngleRuntime{&Wire1};
 inline BNO085SensorRuntime gImuRuntime{};
 
-constexpr uint16_t kSteeringZPosition = 2831U; //Full lock right
-constexpr uint16_t kSteeringMPosition = 752U; //Full lock left
+constexpr uint16_t kSteeringRightLockRawAngle = 2831U;
+constexpr uint16_t kSteeringLeftLockRawAngle = 752U;
+constexpr uint16_t kSteeringCenterRawAngle = 3840U;
 constexpr uint16_t kImuDataCanPollIntervalMs = 10U;
-constexpr float kSteeringMaxAngleDegrees =
-    ((static_cast<float>(kAS5600CountsPerRevolution - kSteeringZPosition +
-                         kSteeringMPosition) /
-      static_cast<float>(kAS5600CountsPerRevolution)) *
-     360.0f) /
-    2.0f;
-constexpr int16_t kSteeringMaxAngleCentiDegrees =
-    static_cast<int16_t>(kSteeringMaxAngleDegrees * 100.0f + 0.5f);
 
 
 constexpr BNO085SubSensorContext kIMUData{
@@ -68,11 +61,8 @@ constexpr AS5600SubSensorContext kSteeringPosData{
     .directionPin = AS5600_SW_DIRECTION_PIN,
     .direction = AS5600_CLOCK_WISE,
     .offsetCentiDegrees = 0,
-    .initializePositionWindow = true,
-    .zPosition = kSteeringZPosition,
-    .mPosition = kSteeringMPosition,
-    .angleMapping = AS5600AngleMapping::CenteredWindow,
-    .maxMappedAngleCentiDegrees = kSteeringMaxAngleCentiDegrees,
+    .centerRawAngle = kSteeringCenterRawAngle,
+    .angleMapping = AS5600AngleMapping::CenteredOffset,
 };
 
 constexpr AS5600SubSensorContext kSteeringPosStats{
@@ -85,11 +75,8 @@ constexpr AS5600SubSensorContext kSteeringPosStats{
     .directionPin = AS5600_SW_DIRECTION_PIN,
     .direction = AS5600_CLOCK_WISE,
     .offsetCentiDegrees = 0,
-    .initializePositionWindow = true,
-    .zPosition = kSteeringZPosition,
-    .mPosition = kSteeringMPosition,
-    .angleMapping = AS5600AngleMapping::CenteredWindow,
-    .maxMappedAngleCentiDegrees = kSteeringMaxAngleCentiDegrees,
+    .centerRawAngle = kSteeringCenterRawAngle,
+    .angleMapping = AS5600AngleMapping::CenteredOffset,
 };
 
 constexpr AnalogSensorContext kFrontBrakePressureSensor{
