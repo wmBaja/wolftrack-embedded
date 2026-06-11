@@ -19,8 +19,8 @@ constexpr BoardHooks kExampleHooks{
 inline AS5600SensorRuntime gSteeringAngleRuntime{&Wire1};
 inline BNO085SensorRuntime gImuRuntime{};
 
-constexpr uint16_t kSteeringZPosition = 3419U;
-constexpr uint16_t kSteeringMPosition = 1650U;
+constexpr uint16_t kSteeringZPosition = 2831U; //Full lock right
+constexpr uint16_t kSteeringMPosition = 752U; //Full lock left
 constexpr uint16_t kImuDataCanPollIntervalMs = 10U;
 constexpr float kSteeringMaxAngleDegrees =
     ((static_cast<float>(kAS5600CountsPerRevolution - kSteeringZPosition +
@@ -142,10 +142,10 @@ constexpr SensorDescriptor kSteeringStatsGroup[] = {
     MakeAS5600StatsSensor(&kSteeringPosStats),
 };
 
-//constexpr SensorDescriptor kBrakePressureGroup[] = {
-//    MakeAnalogSensor(&kFrontBrakePressureSensor),
-//    MakeAnalogSensor(&kRearBrakePressureSensor),
-//};
+constexpr SensorDescriptor kBrakePressureGroup[] = {
+    MakeAnalogSensor(&kFrontBrakePressureSensor),
+    MakeAnalogSensor(&kRearBrakePressureSensor),
+};
 
 //constexpr SensorDescriptor kSuspensionGroup[] = {
 //    MakeAnalogSensor(&kFLSuspensionSensor),
@@ -158,7 +158,7 @@ constexpr MessageGroupConfig kFrontGroups[] = {
     {
         .name = "Steering Angle Data",
         .canId = 0x200,
-        .pollIntervalMs = 10,
+        .pollIntervalMs = 20,
         .sensors = kSteeringDataGroup,
         .sensorCount = sizeof(kSteeringDataGroup) / sizeof(kSteeringDataGroup[0]),
     },
@@ -169,13 +169,13 @@ constexpr MessageGroupConfig kFrontGroups[] = {
         .sensors = kSteeringStatsGroup,
         .sensorCount = sizeof(kSteeringStatsGroup) / sizeof(kSteeringStatsGroup[0]),
     },
-    // {
-    //    .name = "Brake Pressure",
-    //    .canId = 0x202,
-    //    .pollIntervalMs = 20,
-    //    .sensors = kBrakePressureGroup,
-    //    .sensorCount = sizeof(kBrakePressureGroup) / sizeof(kBrakePressureGroup[0]),
-    //},
+    {
+       .name = "Brake Pressure",
+       .canId = 0x202,
+       .pollIntervalMs = 50,
+       .sensors = kBrakePressureGroup,
+       .sensorCount = sizeof(kBrakePressureGroup) / sizeof(kBrakePressureGroup[0]),
+    },
     // Suspension group intentionally disabled because those sensors are not wired.
     // {
     //     .name = "Suspension",
