@@ -22,7 +22,7 @@ bool AnalogSensorSample(const void *ctx, CANFDMessage &outFrame) {
     return false;
   }
   const uint16_t reading = analogRead(config->pin);
-  outFrame.id = config->can_id;outFrame.len = sizeof(reading);
-  memcpy(outFrame.data, &reading, sizeof(reading));
+  outFrame.len = sizeof(reading);
+  memcpy(outFrame.data, &reading, sizeof(reading));
   return true;
 }
