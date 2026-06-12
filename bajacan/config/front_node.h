@@ -19,9 +19,9 @@ constexpr BoardHooks kExampleHooks{
 inline AS5600SensorRuntime gSteeringAngleRuntime{&Wire1};
 inline BNO085SensorRuntime gImuRuntime{};
 
-constexpr uint16_t kSteeringRightLockRawAngle = 2831U;
-constexpr uint16_t kSteeringLeftLockRawAngle = 752U;
-constexpr uint16_t kSteeringCenterRawAngle = 3840U;
+constexpr uint16_t kSteeringRightLockRawAngle = 2833U;
+constexpr uint16_t kSteeringLeftLockRawAngle = 743U;
+constexpr uint16_t kSteeringCenterRawAngle = 1788U;
 constexpr uint16_t kImuDataCanPollIntervalMs = 10U;
 
 
