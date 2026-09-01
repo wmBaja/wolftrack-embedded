@@ -19,17 +19,10 @@ constexpr BoardHooks kExampleHooks{
 inline AS5600SensorRuntime gSteeringAngleRuntime{&Wire1};
 inline BNO085SensorRuntime gImuRuntime{};
 
-constexpr uint16_t kSteeringZPosition = 3419U;
-constexpr uint16_t kSteeringMPosition = 1650U;
+constexpr uint16_t kSteeringRightLockRawAngle = 2833U;
+constexpr uint16_t kSteeringLeftLockRawAngle = 743U;
+constexpr uint16_t kSteeringCenterRawAngle = 1788U;
 constexpr uint16_t kImuDataCanPollIntervalMs = 10U;
-constexpr float kSteeringMaxAngleDegrees =
-    ((static_cast<float>(kAS5600CountsPerRevolution - kSteeringZPosition +
-                         kSteeringMPosition) /
-      static_cast<float>(kAS5600CountsPerRevolution)) *
-     360.0f) /
-    2.0f;
-constexpr int16_t kSteeringMaxAngleCentiDegrees =
-    static_cast<int16_t>(kSteeringMaxAngleDegrees * 100.0f + 0.5f);
 
 
 constexpr BNO085SubSensorContext kIMUData{
@@ -68,11 +61,8 @@ constexpr AS5600SubSensorContext kSteeringPosData{
     .directionPin = AS5600_SW_DIRECTION_PIN,
     .direction = AS5600_CLOCK_WISE,
     .offsetCentiDegrees = 0,
-    .initializePositionWindow = true,
-    .zPosition = kSteeringZPosition,
-    .mPosition = kSteeringMPosition,
-    .angleMapping = AS5600AngleMapping::CenteredWindow,
-    .maxMappedAngleCentiDegrees = kSteeringMaxAngleCentiDegrees,
+    .centerRawAngle = kSteeringCenterRawAngle,
+    .angleMapping = AS5600AngleMapping::CenteredOffset,
 };
 
 constexpr AS5600SubSensorContext kSteeringPosStats{
@@ -85,11 +75,8 @@ constexpr AS5600SubSensorContext kSteeringPosStats{
     .directionPin = AS5600_SW_DIRECTION_PIN,
     .direction = AS5600_CLOCK_WISE,
     .offsetCentiDegrees = 0,
-    .initializePositionWindow = true,
-    .zPosition = kSteeringZPosition,
-    .mPosition = kSteeringMPosition,
-    .angleMapping = AS5600AngleMapping::CenteredWindow,
-    .maxMappedAngleCentiDegrees = kSteeringMaxAngleCentiDegrees,
+    .centerRawAngle = kSteeringCenterRawAngle,
+    .angleMapping = AS5600AngleMapping::CenteredOffset,
 };
 
 constexpr AnalogSensorContext kFrontBrakePressureSensor{
@@ -142,10 +129,10 @@ constexpr SensorDescriptor kSteeringStatsGroup[] = {
     MakeAS5600StatsSensor(&kSteeringPosStats),
 };
 
-//constexpr SensorDescriptor kBrakePressureGroup[] = {
-//    MakeAnalogSensor(&kFrontBrakePressureSensor),
-//    MakeAnalogSensor(&kRearBrakePressureSensor),
-//};
+constexpr SensorDescriptor kBrakePressureGroup[] = {
+    MakeAnalogSensor(&kFrontBrakePressureSensor),
+    MakeAnalogSensor(&kRearBrakePressureSensor),
+};
 
 //constexpr SensorDescriptor kSuspensionGroup[] = {
 //    MakeAnalogSensor(&kFLSuspensionSensor),
@@ -158,7 +145,7 @@ constexpr MessageGroupConfig kFrontGroups[] = {
     {
         .name = "Steering Angle Data",
         .canId = 0x200,
-        .pollIntervalMs = 10,
+        .pollIntervalMs = 20,
         .sensors = kSteeringDataGroup,
         .sensorCount = sizeof(kSteeringDataGroup) / sizeof(kSteeringDataGroup[0]),
     },
@@ -169,13 +156,13 @@ constexpr MessageGroupConfig kFrontGroups[] = {
         .sensors = kSteeringStatsGroup,
         .sensorCount = sizeof(kSteeringStatsGroup) / sizeof(kSteeringStatsGroup[0]),
     },
-    // {
-    //    .name = "Brake Pressure",
-    //    .canId = 0x202,
-    //    .pollIntervalMs = 20,
-    //    .sensors = kBrakePressureGroup,
-    //    .sensorCount = sizeof(kBrakePressureGroup) / sizeof(kBrakePressureGroup[0]),
-    //},
+    {
+       .name = "Brake Pressure",
+       .canId = 0x202,
+       .pollIntervalMs = 50,
+       .sensors = kBrakePressureGroup,
+       .sensorCount = sizeof(kBrakePressureGroup) / sizeof(kBrakePressureGroup[0]),
+    },
     // Suspension group intentionally disabled because those sensors are not wired.
     // {
     //     .name = "Suspension",
