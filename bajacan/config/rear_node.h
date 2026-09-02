@@ -16,6 +16,12 @@ constexpr BoardHooks kExampleHooks{
     nullptr   // afterWake
 };
 
+constexpr ControlMessageConfig kRearControlCommands{
+    0x0,
+    0x0,
+    0xFF  // Disable sleep matching so the rear node stays awake while powered.
+};
+
 // Runtime objects for sensors
 
 inline MLX90614SensorRuntime gIRRuntime{&Wire1, PIN_WIRE1_SDA, PIN_WIRE1_SCL};
@@ -136,32 +142,30 @@ constexpr SensorDescriptor kRpmStatsGroup[] = {
     MakePulseRpmStatsSensor(&kEngineRpmSensorStats),
 };
 
-// constexpr SensorDescriptor kSuspensionGroup[] = {
-//    MakeAnalogSensor(&kRLSuspensionSensor),
-//    MakeAnalogSensor(&kRRSuspensionSensor),
-// };
+constexpr SensorDescriptor kSuspensionGroup[] = {
+   MakeAnalogSensor(&kRLSuspensionSensor),
+   MakeAnalogSensor(&kRRSuspensionSensor),
+};
 
-// constexpr SensorDescriptor kThrottlePosGroup[] = {
-//    MakeAnalogSensor(&kThrottlePosSensor),
-// };
+constexpr SensorDescriptor kThrottlePosGroup[] = {
+   MakeAnalogSensor(&kThrottlePosSensor),
+};
 
 constexpr MessageGroupConfig kRearGroups[] = {
-    // Suspension group intentionally disabled because those sensors are not wired.
-    // {
-    //     .name = "Suspension",
-    //     .canId = 0x100,
-    //     .pollIntervalMs = 1,
-    //     .sensors = kSuspensionGroup,
-    //     .sensorCount = sizeof(kSuspensionGroup) / sizeof(kSuspensionGroup[0]),
-    // },
-    
-    // {
-    //    .name = "Throttle Position",
-    //    .canId = 0x101,
-    //    .pollIntervalMs = 20,
-    //    .sensors = kThrottlePosGroup,
-    //    .sensorCount = sizeof(kThrottlePosGroup) / sizeof(kThrottlePosGroup[0]),
-    //},
+    {
+        .name = "Suspension",
+        .canId = 0x100,
+        .pollIntervalMs = 5,
+        .sensors = kSuspensionGroup,
+        .sensorCount = sizeof(kSuspensionGroup) / sizeof(kSuspensionGroup[0]),
+    },
+    {
+       .name = "Throttle Position",
+       .canId = 0x101,
+       .pollIntervalMs = 20,
+       .sensors = kThrottlePosGroup,
+       .sensorCount = sizeof(kThrottlePosGroup) / sizeof(kThrottlePosGroup[0]),
+    },
     {
         .name = "IR CVT Temp Data",
         .canId = 0x102,
@@ -206,7 +210,7 @@ constexpr BoardConfig kBoardConfig{
     kDefaultDataBitrateFactor,
     kDefaultUseExtendedIds,
     kDefaultStartupDelayMs,
-    kDefaultControlCommands,
+    kRearControlCommands,
     kExampleHooks,
     kRearGroups,
     sizeof(kRearGroups) / sizeof(kRearGroups[0]),

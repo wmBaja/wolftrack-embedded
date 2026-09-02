@@ -232,55 +232,77 @@ void InitializeSensors() {
   RescheduleGroups(millis());
 }
 
-void PollGroups(const uint32_t nowMs) {
+bool IsGroupDue(const GroupRuntime &runtime, const uint32_t nowMs) {
+  return IsActiveGroup(runtime) && !(nowMs < runtime.nextPollAtMs);
+}
+
+GroupRuntime *FindNextDueGroup(const uint32_t nowMs) {
+  GroupRuntime *nextRuntime = nullptr;
   for (size_t i = 0; i < kBoardConfig.groupCount; ++i) {
     GroupRuntime &runtime = gGroupRuntime[i];
-    if (!IsActiveGroup(runtime)) {
+    if (!IsGroupDue(runtime, nowMs)) {
       continue;
     }
 
-    if (nowMs < runtime.nextPollAtMs) {
+    if (nextRuntime == nullptr ||
+        runtime.nextPollAtMs < nextRuntime->nextPollAtMs) {
+      nextRuntime = &runtime;
+    }
+  }
+  return nextRuntime;
+}
+
+void RescheduleGroupAfterPoll(GroupRuntime &runtime, const uint32_t nowMs) {
+  const uint32_t scheduledAt = runtime.nextPollAtMs;
+  const uint32_t intervalMs = runtime.group->pollIntervalMs;
+  uint32_t nextPoll = scheduledAt + intervalMs;
+  if (nextPoll <= nowMs) {
+    nextPoll = nowMs + intervalMs;
+  }
+  runtime.nextPollAtMs = nextPoll;
+}
+
+void PollGroup(GroupRuntime &runtime, const uint32_t nowMs) {
+  RescheduleGroupAfterPoll(runtime, nowMs);
+
+  CANFDMessage frame;
+  frame.id = runtime.group->canId;
+  frame.ext = kBoardConfig.useExtendedIds;
+  frame.len = runtime.payloadBytes;
+  memset(frame.data, 0, sizeof(frame.data));
+
+  uint8_t payloadOffset = 0U;
+  for (size_t sensorIndex = 0; sensorIndex < runtime.group->sensorCount;
+       ++sensorIndex) {
+    const SensorDescriptor &desc = runtime.group->sensors[sensorIndex];
+    const SensorContext *context = GetSensorContext(desc);
+    if (context == nullptr) {
       continue;
     }
 
-    {
-      const uint32_t scheduledAt = runtime.nextPollAtMs;
-      const uint32_t intervalMs = runtime.group->pollIntervalMs;
-      uint32_t nextPoll = scheduledAt + intervalMs;
-      if (nextPoll <= nowMs) {
-        nextPoll = nowMs + intervalMs;
-      }
-      runtime.nextPollAtMs = nextPoll;
+    if (!SampleGroupMember(desc, *context, &frame.data[payloadOffset])) {
+      PrintGroupMemberZeroFill(runtime.group->name, context->name, nowMs);
     }
+    payloadOffset += context->payloadSize;
+  }
 
-    CANFDMessage frame;
-    frame.id = runtime.group->canId;
-    frame.ext = kBoardConfig.useExtendedIds;
-    frame.len = runtime.payloadBytes;
-    memset(frame.data, 0, sizeof(frame.data));
-
-    uint8_t payloadOffset = 0U;
-    for (size_t sensorIndex = 0; sensorIndex < runtime.group->sensorCount;
-         ++sensorIndex) {
-      const SensorDescriptor &desc = runtime.group->sensors[sensorIndex];
-      const SensorContext *context = GetSensorContext(desc);
-      if (context == nullptr) {
-        continue;
-      }
-
-      if (!SampleGroupMember(desc, *context, &frame.data[payloadOffset])) {
-        PrintGroupMemberZeroFill(runtime.group->name, context->name, nowMs);
-      }
-      payloadOffset += context->payloadSize;
-    }
-
-    frame.pad();
-    const bool sent = gCanDriver.tryToSend(frame);
+  frame.pad();
+  const bool sent = gCanDriver.tryToSend(frame);
 
 #if BAJACAN_ENABLE_DEBUG_PRINTS
-    PrintGroupPoll(runtime.group->name, frame, nowMs);
-    PrintCanTxResult(frame, nowMs, sent);
+  PrintGroupPoll(runtime.group->name, frame, nowMs);
+  PrintCanTxResult(frame, nowMs, sent);
 #endif
+}
+
+void PollGroups() {
+  for (size_t i = 0; i < kBoardConfig.groupCount; ++i) {
+    const uint32_t nowMs = millis();
+    GroupRuntime *runtime = FindNextDueGroup(nowMs);
+    if (runtime == nullptr) {
+      return;
+    }
+    PollGroup(*runtime, nowMs);
   }
 }
 
@@ -388,8 +410,6 @@ void setup() {
 }
 
 void loop() {
-  const uint32_t now = millis();
-
   // Always service CAN to detect wake packets and other inbound commands.
   ServiceIncomingCan();
   WakeIfRequested();
@@ -401,7 +421,7 @@ void loop() {
     return;
   }
 
-  PollGroups(now);
+  PollGroups();
 
   if (gSleepRequested) {
     PrepareForSleep();

@@ -14,6 +14,12 @@ constexpr BoardHooks kExampleHooks{
     nullptr   // afterWake
 };
 
+constexpr ControlMessageConfig kFrontControlCommands{
+    0x0,
+    0x0,
+    0xFF  // Disable sleep matching so the front node stays awake while powered.
+};
+
 
 // Runtime objects for sensors
 inline AS5600SensorRuntime gSteeringAngleRuntime{&Wire1};
@@ -22,7 +28,7 @@ inline BNO085SensorRuntime gImuRuntime{};
 constexpr uint16_t kSteeringRightLockRawAngle = 2833U;
 constexpr uint16_t kSteeringLeftLockRawAngle = 743U;
 constexpr uint16_t kSteeringCenterRawAngle = 1788U;
-constexpr uint16_t kImuDataCanPollIntervalMs = 10U;
+constexpr uint16_t kImuDataCanPollIntervalMs = 20U;
 
 
 constexpr BNO085SubSensorContext kIMUData{
@@ -134,14 +140,21 @@ constexpr SensorDescriptor kBrakePressureGroup[] = {
     MakeAnalogSensor(&kRearBrakePressureSensor),
 };
 
-//constexpr SensorDescriptor kSuspensionGroup[] = {
-//    MakeAnalogSensor(&kFLSuspensionSensor),
-//    MakeAnalogSensor(&kFRSuspensionSensor),
-//};
+constexpr SensorDescriptor kSuspensionGroup[] = {
+   MakeAnalogSensor(&kFLSuspensionSensor),
+   MakeAnalogSensor(&kFRSuspensionSensor),
+};
 
 
 // List of groups (to give to board config)
 constexpr MessageGroupConfig kFrontGroups[] = {
+    {
+        .name = "Suspension",
+        .canId = 0x203,
+        .pollIntervalMs = 5,
+        .sensors = kSuspensionGroup,
+        .sensorCount = sizeof(kSuspensionGroup) / sizeof(kSuspensionGroup[0]),
+    },
     {
         .name = "Steering Angle Data",
         .canId = 0x200,
@@ -163,14 +176,6 @@ constexpr MessageGroupConfig kFrontGroups[] = {
        .sensors = kBrakePressureGroup,
        .sensorCount = sizeof(kBrakePressureGroup) / sizeof(kBrakePressureGroup[0]),
     },
-    // Suspension group intentionally disabled because those sensors are not wired.
-    // {
-    //     .name = "Suspension",
-    //     .canId = 0x203,
-    //     .pollIntervalMs = 1,
-    //     .sensors = kSuspensionGroup,
-    //     .sensorCount = sizeof(kSuspensionGroup) / sizeof(kSuspensionGroup[0]),
-    // },
     {
         .name = "IMU_Data",
         .canId = 0x204,
@@ -198,7 +203,7 @@ constexpr BoardConfig kBoardConfig{
     kDefaultDataBitrateFactor,
     kDefaultUseExtendedIds,
     kDefaultStartupDelayMs,
-    kDefaultControlCommands,
+    kFrontControlCommands,
     kExampleHooks,
     kFrontGroups,
     sizeof(kFrontGroups) / sizeof(kFrontGroups[0]),
